@@ -1,0 +1,2028 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>St. Stephen's School Portal</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background:#f8fafc; }
+    #root { min-height:100vh; }
+    input::placeholder { color: rgba(255,255,255,0.4); }
+    ::-webkit-scrollbar { width:4px; }
+    ::-webkit-scrollbar-track { background:transparent; }
+    ::-webkit-scrollbar-thumb { background:#e2e8f0; border-radius:4px; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel" data-presets="react">
+    const { useState, useRef, useEffect } = React;
+
+// ─── Data ──────────────────────────────────────────────────────────────────
+
+const HOUSES = {
+  Red:    { color:"#E53E3E", light:"#FFF5F5", accent:"#FC8181", emoji:"🔴", gradient:"linear-gradient(135deg,#E53E3E,#C53030)" },
+  Blue:   { color:"#3182CE", light:"#EBF8FF", accent:"#63B3ED", emoji:"🔵", gradient:"linear-gradient(135deg,#3182CE,#2B6CB0)" },
+  Green:  { color:"#38A169", light:"#F0FFF4", accent:"#68D391", emoji:"🟢", gradient:"linear-gradient(135deg,#38A169,#276749)" },
+  Yellow: { color:"#D69E2E", light:"#FFFFF0", accent:"#F6E05E", emoji:"🟡", gradient:"linear-gradient(135deg,#D69E2E,#B7791F)" },
+};
+
+const INITIAL_STUDENTS = [
+  { id:1, name:"Koppula Thanmaya Sri", class:"9A", house:"Blue",   rollNo:"9A01", avatar:"KT", parentId:"PAR001", academics:{Math:92,Science:88,English:79,Social:85,Hindi:91,Telugu:87}, activities:["Basketball","Science Club"], points:145, attendance:91 },
+  { id:2, name:"Muddam Divya",         class:"7B", house:"Red",    rollNo:"7B05", avatar:"MD", parentId:"PAR002", academics:{Math:76,Science:82,English:91,Social:88,Hindi:74,Telugu:90}, activities:["Dance","Art Club"],          points:162, attendance:95 },
+  { id:3, name:"Gaddam Harini",        class:"5C", house:"Green",  rollNo:"5C12", avatar:"GH", parentId:"PAR003", academics:{Math:95,Science:90,English:85,Social:78,Hindi:88,Telugu:82}, activities:["Chess","Football"],          points:130, attendance:87 },
+  { id:4, name:"O. Charanya",          class:"8C", house:"Green",  rollNo:"8C03", avatar:"OC", parentId:"PAR004", academics:{Math:80,Science:75,English:88,Social:91,Hindi:82,Telugu:94}, activities:["Debate","Volleyball"],       points:138, attendance:93 },
+  { id:5, name:"Muddam Manoj",         class:"6A", house:"Yellow", rollNo:"6A07", avatar:"MM", parentId:"PAR002", academics:{Math:70,Science:78,English:72,Social:80,Hindi:68,Telugu:75}, activities:["Music","Cricket"],           points:129, attendance:80 },
+  { id:6, name:"Madagoni Nishitha",    class:"4B", house:"Red",    rollNo:"4B02", avatar:"MN", parentId:"PAR005", academics:{Math:88,Science:84,English:90,Social:76,Hindi:85,Telugu:88}, activities:["Drawing","Badminton"],       points:110, attendance:96 },
+  { id:7, name:"Gaddam Spandana",      class:"3A", house:"Yellow", rollNo:"3A09", avatar:"GS", parentId:"PAR006", academics:{Math:79,Science:81,English:75,Social:83,Hindi:77,Telugu:80}, activities:["Karate","Swimming"],          points:98,  attendance:88 },
+  { id:8, name:"Derangula Venkatesh",  class:"2B", house:"Blue",   rollNo:"2B11", avatar:"DV", parentId:"PAR007", academics:{Math:91,Science:86,English:93,Social:80,Hindi:89,Telugu:96}, activities:["Dance","Drawing"],            points:122, attendance:99 },
+];
+
+// PAR002 (Muddam Shankar) has two children — Divya & Manoj
+const PARENTS = [
+  { id:"PAR001", name:"Mr. Koppula Chandraiah", children:[1] },
+  { id:"PAR002", name:"Mr. Muddam Shankar",     children:[2,5] },
+  { id:"PAR003", name:"Mr. Gaddam Sridhar",     children:[3] },
+  { id:"PAR004", name:"Mrs. O. Muthyalu",       children:[4] },
+  { id:"PAR005", name:"Mr. M. Venkateshwarlu",  children:[6] },
+  { id:"PAR006", name:"Mr. Gaddam Srinivas",    children:[7] },
+  { id:"PAR007", name:"Mr. Derangala Ooshanna", children:[8] },
+];
+
+const INITIAL_HOUSE_POINTS = { Red:1842, Blue:1756, Green:1923, Yellow:1601 };
+
+const INITIAL_EVENTS = [
+  { id:1, title:"Annual Science Fair",    date:"Mar 13, 2026", category:"Academic", desc:"Showcase innovative science projects", icon:"🔬" },
+  { id:2, title:"Inter-House Cricket",    date:"Mar 18, 2026", category:"Sports",   desc:"Blue vs Green semifinal match",        icon:"🏏" },
+  { id:3, title:"Cultural Fest - Utsav", date:"Mar 22, 2026", category:"Cultural", desc:"Annual celebration of arts & culture", icon:"🎭" },
+  { id:4, title:"Math Olympiad",          date:"Mar 25, 2026", category:"Academic", desc:"Inter-school math competition",        icon:"📐" },
+];
+
+const MONTHS    = ["Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec","Jan","Feb","Mar"];
+const ATT_TREND = [85,92,78,95,88,90,87,93,76,88,91,85];
+const SUBJECTS  = ["Math","Science","English","Social","Hindi","Telugu"];
+const font      = "'Nunito', sans-serif";
+
+// ─── Shared UI ──────────────────────────────────────────────────────────────
+
+function Card({ children, style={} }) {
+  return <div style={{ background:"white", borderRadius:16, padding:16, boxShadow:"0 2px 12px rgba(0,0,0,0.07)", ...style }}>{children}</div>;
+}
+
+function Avatar({ initials, house, size=40 }) {
+  const h = HOUSES[house];
+  return (
+    <div style={{ width:size, height:size, borderRadius:"50%", background:h?.gradient||"#667eea",
+      display:"flex", alignItems:"center", justifyContent:"center",
+      color:"white", fontWeight:700, fontSize:size*0.35, fontFamily:font, flexShrink:0,
+      boxShadow:`0 2px 8px ${h?.color}55` }}>{initials}</div>
+  );
+}
+
+function Badge({ text, color="#4338CA", bg="#EEF2FF" }) {
+  return <span style={{ background:bg, color, fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:20, fontFamily:font }}>{text}</span>;
+}
+
+function Ttl({ children }) {
+  return <div style={{ fontSize:14, fontWeight:800, color:"#1e293b", marginBottom:12, fontFamily:font }}>{children}</div>;
+}
+
+function Inp({ label, value, onChange, type="text", placeholder="" }) {
+  return (
+    <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
+      {label && <label style={{ fontSize:11, fontWeight:700, color:"#64748b", fontFamily:font, textTransform:"uppercase", letterSpacing:0.5 }}>{label}</label>}
+      <input type={type} value={value} onChange={onChange} placeholder={placeholder}
+        style={{ padding:"11px 12px", borderRadius:10, border:"1.5px solid #e2e8f0",
+          fontSize:13, fontFamily:font, outline:"none", color:"#1e293b", background:"#f8fafc" }} />
+    </div>
+  );
+}
+
+function Sel({ label, value, onChange, options }) {
+  return (
+    <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
+      {label && <label style={{ fontSize:11, fontWeight:700, color:"#64748b", fontFamily:font, textTransform:"uppercase", letterSpacing:0.5 }}>{label}</label>}
+      <select value={value} onChange={onChange}
+        style={{ padding:"11px 12px", borderRadius:10, border:"1.5px solid #e2e8f0",
+          fontSize:13, fontFamily:font, outline:"none", color:"#1e293b", background:"#f8fafc" }}>
+        {options.map(o=><option key={o.value||o} value={o.value||o}>{o.label||o}</option>)}
+      </select>
+    </div>
+  );
+}
+
+function Btn({ children, onClick, bg="#1a1a2e" }) {
+  return (
+    <button onClick={onClick} style={{ padding:"12px", borderRadius:12, border:"none", cursor:"pointer",
+      background:bg, color:"white", fontWeight:800, fontSize:14, fontFamily:font, width:"100%" }}>
+      {children}
+    </button>
+  );
+}
+
+function Toast({ msg }) {
+  return msg ? (
+    <div style={{ position:"fixed", bottom:90, left:"50%", transform:"translateX(-50%)",
+      background:"#1e293b", color:"white", padding:"10px 20px", borderRadius:20,
+      fontSize:13, fontWeight:700, fontFamily:font, zIndex:999,
+      boxShadow:"0 4px 20px rgba(0,0,0,0.3)", whiteSpace:"nowrap" }}>✅ {msg}</div>
+  ) : null;
+}
+
+// ─── Login ──────────────────────────────────────────────────────────────────
+
+// ─── Login ──────────────────────────────────────────────────────────────────
+
+const CREDENTIALS = {
+  student: { username:"9A01",   password:"Thanmaya@9"  },
+  parent:  { username:"PAR002", password:"Shankar@123" },
+  teacher: { username:"TCH001", password:"Admin@123"   },
+};
+
+function LoginScreen({ onLogin }) {
+  const [role,    setRole]   = useState("student");
+  const [uname,   setUname]  = useState("");
+  const [pwd,     setPwd]    = useState("");
+  const [error,   setError]  = useState("");
+  const [showPwd, setShowPwd]= useState(false);
+
+  const roles = [["student","👤 Student"],["parent","👨‍👩‍👧 Parent"],["teacher","📋 Teacher"]];
+
+  const info = {
+    student: { label:"Koppula Thanmaya Sri · Class 9A", userHint:"Roll No" },
+    parent:  { label:"Mr. Muddam Shankar · Parent",     userHint:"Parent ID" },
+    teacher: { label:"Teacher / Admin",                  userHint:"Staff ID" },
+  };
+
+  const handleSignIn = () => {
+    const c = CREDENTIALS[role];
+    if (uname.trim() === c.username && pwd === c.password) {
+      setError(""); onLogin(role);
+    } else {
+      setError("Incorrect username or password. Please try again.");
+    }
+  };
+
+  const autoFill = () => {
+    setUname(CREDENTIALS[role].username);
+    setPwd(CREDENTIALS[role].password);
+    setError("");
+  };
+
+  return (
+    <div style={{ minHeight:"100vh", background:"linear-gradient(160deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%)",
+      display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center",
+      padding:24, fontFamily:font }}>
+      <div style={{ width:"100%", maxWidth:380 }}>
+
+        <div style={{ textAlign:"center", marginBottom:28 }}>
+          <div style={{ width:76, height:76, borderRadius:24, margin:"0 auto 14px",
+            background:"linear-gradient(135deg,#e2b96f,#c9943a)", display:"flex", alignItems:"center",
+            justifyContent:"center", fontSize:34, boxShadow:"0 8px 32px rgba(210,163,73,0.4)" }}>🏫</div>
+          <div style={{ color:"white", fontSize:24, fontWeight:800 }}>St. Stephen's</div>
+          <div style={{ color:"#94a3b8", fontSize:12, fontWeight:600, letterSpacing:2, textTransform:"uppercase", marginTop:2 }}>School Portal</div>
+        </div>
+
+        <div style={{ background:"rgba(255,255,255,0.08)", borderRadius:12, padding:4, display:"flex", marginBottom:20 }}>
+          {roles.map(([r,label])=>(
+            <button key={r} onClick={()=>{ setRole(r); setUname(""); setPwd(""); setError(""); }}
+              style={{ flex:1, padding:"10px 0", borderRadius:10, border:"none", cursor:"pointer",
+                background:role===r?"white":"transparent", color:role===r?"#1a1a2e":"#94a3b8",
+                fontWeight:700, fontSize:11, fontFamily:font, transition:"all 0.2s" }}>
+              {label}
+            </button>
+          ))}
+        </div>
+
+        <div style={{ background:"rgba(226,185,111,0.12)", border:"1.5px solid rgba(226,185,111,0.3)",
+          borderRadius:12, padding:"12px 14px", marginBottom:18 }}>
+          <div style={{ color:"#e2b96f", fontSize:10, fontWeight:800, letterSpacing:1,
+            textTransform:"uppercase", marginBottom:8 }}>🔑 Demo Credentials</div>
+          <div style={{ color:"#cbd5e1", fontSize:12, fontWeight:700, marginBottom:8 }}>{info[role].label}</div>
+          <div style={{ display:"flex", gap:20 }}>
+            <div>
+              <div style={{ color:"#64748b", fontSize:10, fontWeight:600 }}>USERNAME</div>
+              <div style={{ color:"white", fontSize:14, fontWeight:800, fontFamily:"monospace", letterSpacing:1 }}>
+                {CREDENTIALS[role].username}
+              </div>
+            </div>
+            <div>
+              <div style={{ color:"#64748b", fontSize:10, fontWeight:600 }}>PASSWORD</div>
+              <div style={{ color:"white", fontSize:14, fontWeight:800, fontFamily:"monospace", letterSpacing:1 }}>
+                {CREDENTIALS[role].password}
+              </div>
+            </div>
+          </div>
+          <div onClick={autoFill} style={{ marginTop:10, background:"rgba(226,185,111,0.2)", borderRadius:8,
+            padding:"8px 12px", textAlign:"center", cursor:"pointer", color:"#e2b96f", fontSize:11, fontWeight:800 }}>
+            ⚡ Auto-fill Credentials
+          </div>
+        </div>
+
+        <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+          <input value={uname} onChange={e=>{ setUname(e.target.value); setError(""); }}
+            placeholder={info[role].userHint}
+            style={{ padding:"14px 16px", borderRadius:12, boxSizing:"border-box", width:"100%",
+              border:`1.5px solid ${error?"#E53E3E":"rgba(255,255,255,0.1)"}`,
+              background:"rgba(255,255,255,0.07)", color:"white", fontSize:14, fontFamily:font, outline:"none" }} />
+
+          <div style={{ position:"relative" }}>
+            <input type={showPwd?"text":"password"} value={pwd}
+              onChange={e=>{ setPwd(e.target.value); setError(""); }}
+              onKeyDown={e=>{ if(e.key==="Enter") handleSignIn(); }}
+              placeholder="Password"
+              style={{ padding:"14px 44px 14px 16px", borderRadius:12, boxSizing:"border-box", width:"100%",
+                border:`1.5px solid ${error?"#E53E3E":"rgba(255,255,255,0.1)"}`,
+                background:"rgba(255,255,255,0.07)", color:"white", fontSize:14, fontFamily:font, outline:"none" }} />
+            <span onClick={()=>setShowPwd(p=>!p)}
+              style={{ position:"absolute", right:14, top:"50%", transform:"translateY(-50%)",
+                cursor:"pointer", fontSize:16, opacity:0.5 }}>{showPwd?"🙈":"👁"}</span>
+          </div>
+
+          {error && (
+            <div style={{ background:"rgba(229,62,62,0.15)", border:"1px solid rgba(229,62,62,0.4)",
+              borderRadius:10, padding:"10px 14px", color:"#fc8181", fontSize:12, fontWeight:600 }}>
+              ⚠️ {error}
+            </div>
+          )}
+
+          <button onClick={handleSignIn}
+            style={{ padding:"15px", borderRadius:12, border:"none", cursor:"pointer",
+              background:"linear-gradient(135deg,#e2b96f,#c9943a)", color:"white",
+              fontWeight:800, fontSize:15, fontFamily:font, boxShadow:"0 4px 20px rgba(210,163,73,0.5)", marginTop:4 }}>
+            Sign In →
+          </button>
+        </div>
+
+        <div style={{ textAlign:"center", color:"#475569", fontSize:11, marginTop:20 }}>
+          St. Stephen's School · Prototype Demo · March 2026
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── STUDENT SCREENS ────────────────────────────────────────────────────────
+
+function StudentHome({ students }) {
+  const s = students[0];
+  const h = HOUSES[s.house];
+  const avg = Math.round(Object.values(s.academics).reduce((a,b)=>a+b,0)/Object.values(s.academics).length);
+
+  return (
+    <div style={{ padding:"16px 16px 80px", display:"flex", flexDirection:"column", gap:14 }}>
+
+      {/* Profile card */}
+      <Card style={{ background:h.gradient, color:"white" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+          <Avatar initials={s.avatar} house={s.house} size={52} />
+          <div style={{ flex:1 }}>
+            <div style={{ fontSize:18, fontWeight:800 }}>Hi, {s.name.split(" ")[1]}! 👋</div>
+            <div style={{ fontSize:12, opacity:0.85 }}>Class {s.class} · Roll No: {s.rollNo}</div>
+            <div style={{ display:"inline-flex", alignItems:"center", gap:4,
+              background:"rgba(255,255,255,0.2)", borderRadius:20, padding:"2px 10px", marginTop:4, fontSize:11, fontWeight:700 }}>
+              {h.emoji} {s.house} House
+            </div>
+          </div>
+        </div>
+      </Card>
+
+      {/* Stats */}
+      <Card>
+        <div style={{ display:"flex", justifyContent:"space-around" }}>
+          {[["Avg Score",`${avg}%`,"#3182CE"],["House Pts",s.points,h.color],["Attendance",`${s.attendance}%`,"#38A169"]].map(([l,v,c])=>(
+            <div key={l} style={{ textAlign:"center" }}>
+              <div style={{ fontSize:22, fontWeight:800, color:c, fontFamily:font }}>{v}</div>
+              <div style={{ fontSize:10, color:"#94a3b8", fontWeight:600, textTransform:"uppercase" }}>{l}</div>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      {/* Academics */}
+      <Card>
+        <Ttl>📚 Academic Performance</Ttl>
+        {Object.entries(s.academics).map(([sub,score])=>(
+          <div key={sub} style={{ marginBottom:10 }}>
+            <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
+              <span style={{ fontSize:12, fontWeight:700, color:"#475569" }}>{sub}</span>
+              <span style={{ fontSize:12, fontWeight:800, color:score>=90?"#38A169":score>=75?"#3182CE":"#E53E3E" }}>{score}%</span>
+            </div>
+            <div style={{ background:"#f1f5f9", borderRadius:6, height:7 }}>
+              <div style={{ height:"100%", borderRadius:6, width:`${score}%`, background:score>=90?"#38A169":score>=75?"#3182CE":"#E53E3E" }} />
+            </div>
+          </div>
+        ))}
+      </Card>
+
+      {/* Attendance trend */}
+      <Card>
+        <Ttl>📅 Attendance Trend</Ttl>
+        <div style={{ display:"flex", alignItems:"flex-end", gap:4, height:65 }}>
+          {ATT_TREND.map((val,i)=>(
+            <div key={i} style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:3 }}>
+              <div style={{ width:"100%", height:`${(val/100)*50}px`, borderRadius:"3px 3px 0 0",
+                background:val>=90?"#38A169":val>=80?"#D69E2E":"#E53E3E", opacity:i===11?1:0.5 }} />
+              <div style={{ fontSize:7, color:"#94a3b8", fontWeight:600 }}>{MONTHS[i]}</div>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      {/* Activities */}
+      <Card>
+        <Ttl>🎯 My Activities</Ttl>
+        <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+          {s.activities.map(a=>(
+            <div key={a} style={{ padding:"8px 14px", borderRadius:20, background:h.light,
+              color:h.color, fontSize:12, fontWeight:700, border:`1.5px solid ${h.accent}` }}>{a}</div>
+          ))}
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+function StudentHouses({ housePoints, students }) {
+  const sorted = Object.entries(housePoints).sort((a,b)=>b[1]-a[1]);
+  const max = sorted[0][1];
+  const medals = ["🥇","🥈","🥉","🏅"];
+  const top = [...students].sort((a,b)=>b.points-a.points);
+
+  return (
+    <div style={{ padding:"16px 16px 80px", display:"flex", flexDirection:"column", gap:14 }}>
+      <div style={{ fontSize:20, fontWeight:900, color:"#1e293b", fontFamily:font }}>🏆 House Leaderboard</div>
+
+      <Card style={{ background:"linear-gradient(135deg,#1a1a2e,#16213e)" }}>
+        <div style={{ textAlign:"center", color:"rgba(255,255,255,0.5)", fontSize:11, fontWeight:700,
+          letterSpacing:2, textTransform:"uppercase", marginBottom:16 }}>Live Standings</div>
+        {sorted.map(([name,pts],i)=>{
+          const h=HOUSES[name];
+          return (
+            <div key={name} style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}>
+              <div style={{ fontSize:18, width:24 }}>{medals[i]}</div>
+              <div style={{ width:70, color:"white", fontWeight:800, fontSize:12 }}>{h.emoji} {name}</div>
+              <div style={{ flex:1, background:"rgba(255,255,255,0.1)", borderRadius:8, height:28, overflow:"hidden" }}>
+                <div style={{ height:"100%", width:`${(pts/max)*100}%`, background:h.gradient, borderRadius:8,
+                  display:"flex", alignItems:"center", justifyContent:"flex-end", paddingRight:8 }}>
+                  <span style={{ color:"white", fontSize:11, fontWeight:800 }}>{pts.toLocaleString()}</span>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </Card>
+
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+        {sorted.map(([name,pts],i)=>{
+          const h=HOUSES[name];
+          return (
+            <Card key={name} style={{ border:`2px solid ${h.accent}`, background:h.light }}>
+              <div style={{ textAlign:"center" }}>
+                <div style={{ fontSize:28 }}>{h.emoji}</div>
+                <div style={{ fontSize:13, fontWeight:800, color:h.color }}>{name}</div>
+                <div style={{ fontSize:22, fontWeight:900, color:h.color, margin:"6px 0" }}>{pts.toLocaleString()}</div>
+                <div style={{ fontSize:10, color:"#94a3b8" }}>points</div>
+                {i===0&&<div style={{ marginTop:6, fontSize:10, fontWeight:800, color:h.color }}>👑 LEADING</div>}
+              </div>
+            </Card>
+          );
+        })}
+      </div>
+
+      <Card>
+        <Ttl>⭐ Top Point Earners</Ttl>
+        {top.map((s,i)=>{
+          const h=HOUSES[s.house];
+          return (
+            <div key={s.id} style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 0",
+              borderBottom:i<top.length-1?"1px solid #f1f5f9":"none" }}>
+              <div style={{ fontSize:16, width:24, textAlign:"center" }}>{medals[i]||`${i+1}`}</div>
+              <Avatar initials={s.avatar} house={s.house} size={36} />
+              <div style={{ flex:1 }}>
+                <div style={{ fontSize:13, fontWeight:700, color:"#1e293b" }}>{s.name}</div>
+                <div style={{ fontSize:11, color:"#94a3b8" }}>Class {s.class} · {h.emoji} {s.house}</div>
+              </div>
+              <div style={{ fontSize:14, fontWeight:800, color:h.color }}>{s.points} pts</div>
+            </div>
+          );
+        })}
+      </Card>
+    </div>
+  );
+}
+
+function StudentEvents({ events }) {
+  const [filter, setFilter] = useState("All");
+  const cats = ["All","Academic","Sports","Cultural"];
+  const filtered = filter==="All"?events:events.filter(e=>e.category===filter);
+  const cc = { Academic:{bg:"#EBF8FF",color:"#3182CE"}, Sports:{bg:"#F0FFF4",color:"#38A169"}, Cultural:{bg:"#FAF5FF",color:"#805AD5"} };
+
+  return (
+    <div style={{ padding:"16px 16px 80px", display:"flex", flexDirection:"column", gap:14 }}>
+      <div style={{ fontSize:20, fontWeight:900, color:"#1e293b", fontFamily:font }}>📅 Events & Activities</div>
+      <div style={{ display:"flex", gap:8, overflowX:"auto" }}>
+        {cats.map(c=>(
+          <button key={c} onClick={()=>setFilter(c)} style={{ padding:"8px 16px", borderRadius:20, border:"none",
+            cursor:"pointer", whiteSpace:"nowrap", background:filter===c?"#1a1a2e":"#f1f5f9",
+            color:filter===c?"white":"#64748b", fontWeight:700, fontSize:12, fontFamily:font }}>{c}</button>
+        ))}
+      </div>
+      {filtered.map(ev=>{
+        const c=cc[ev.category]||{bg:"#f1f5f9",color:"#64748b"};
+        return (
+          <Card key={ev.id}>
+            <div style={{ display:"flex", gap:12 }}>
+              <div style={{ width:52, height:52, borderRadius:14, background:c.bg,
+                display:"flex", alignItems:"center", justifyContent:"center", fontSize:24, flexShrink:0 }}>{ev.icon}</div>
+              <div style={{ flex:1 }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>
+                  <div style={{ fontSize:14, fontWeight:800, color:"#1e293b", flex:1 }}>{ev.title}</div>
+                  <Badge text={ev.category} color={c.color} bg={c.bg} />
+                </div>
+                <div style={{ fontSize:12, color:"#94a3b8", marginTop:2 }}>📆 {ev.date}</div>
+                <div style={{ fontSize:12, color:"#64748b", marginTop:4 }}>{ev.desc}</div>
+              </div>
+            </div>
+            <div style={{ marginTop:12, display:"flex", gap:8 }}>
+              <button style={{ flex:1, padding:"9px", borderRadius:10, background:"#1a1a2e", color:"white",
+                border:"none", cursor:"pointer", fontWeight:700, fontSize:12, fontFamily:font }}>Register</button>
+              <button style={{ padding:"9px 16px", borderRadius:10, background:"#f1f5f9", color:"#64748b",
+                border:"none", cursor:"pointer", fontWeight:700, fontSize:12, fontFamily:font }}>Details</button>
+            </div>
+          </Card>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── PARENT SCREENS ─────────────────────────────────────────────────────────
+
+function ParentHome({ parent, students }) {
+  const myChildren = students.filter(s=>parent.children.includes(s.id));
+  const [sel, setSel] = useState(0);
+  const s = myChildren[sel];
+  const h = HOUSES[s.house];
+  const avg = Math.round(Object.values(s.academics).reduce((a,b)=>a+b,0)/Object.values(s.academics).length);
+
+  const notices = [
+    { icon:"📢", text:"Term 2 report cards are now available for download", time:"Today" },
+    { icon:"💰", text:"Fee payment due by March 20, 2026", time:"2 days ago" },
+    { icon:"📅", text:"Parent-Teacher Meeting scheduled for March 28, 2026", time:"3 days ago" },
+  ];
+
+  return (
+    <div style={{ padding:"16px 16px 80px", display:"flex", flexDirection:"column", gap:14 }}>
+
+      {/* Welcome */}
+      <Card style={{ background:"linear-gradient(135deg,#1a1a2e,#16213e)", color:"white" }}>
+        <div style={{ fontSize:16, fontWeight:800 }}>Welcome, {parent.name.split(" ")[1]}! 👋</div>
+        <div style={{ fontSize:12, opacity:0.6, marginTop:2 }}>St. Stephen's Parent Portal</div>
+      </Card>
+
+      {/* Child selector — only shows if more than 1 child */}
+      {myChildren.length > 1 && (
+        <Card>
+          <div style={{ fontSize:11, fontWeight:700, color:"#94a3b8", marginBottom:10, textTransform:"uppercase", letterSpacing:1 }}>My Children</div>
+          <div style={{ display:"flex", gap:8 }}>
+            {myChildren.map((child,i)=>(
+              <div key={child.id} onClick={()=>setSel(i)} style={{ padding:"8px 16px", borderRadius:12, cursor:"pointer",
+                background:sel===i?HOUSES[child.house].gradient:"#f8fafc",
+                color:sel===i?"white":"#64748b", fontWeight:700, fontSize:13,
+                border:sel===i?"none":"1.5px solid #e2e8f0", fontFamily:font, transition:"all 0.3s" }}>
+                {child.name.split(" ")[1]}
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {/* Child summary */}
+      <Card style={{ background:h.gradient, color:"white" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+          <Avatar initials={s.avatar} house={s.house} size={52} />
+          <div>
+            <div style={{ fontSize:17, fontWeight:800 }}>{s.name}</div>
+            <div style={{ fontSize:12, opacity:0.85 }}>Class {s.class} · {h.emoji} {s.house} House</div>
+            <div style={{ fontSize:11, opacity:0.7 }}>Roll No: {s.rollNo}</div>
+          </div>
+        </div>
+        <div style={{ display:"flex", justifyContent:"space-around", marginTop:16,
+          paddingTop:16, borderTop:"1px solid rgba(255,255,255,0.2)" }}>
+          {[["Avg Score",`${avg}%`],["Attendance",`${s.attendance}%`],["House Pts",s.points]].map(([l,v])=>(
+            <div key={l} style={{ textAlign:"center" }}>
+              <div style={{ fontSize:20, fontWeight:900 }}>{v}</div>
+              <div style={{ fontSize:10, opacity:0.7 }}>{l}</div>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      {/* Scores */}
+      <Card>
+        <Ttl>📊 Subject Scores</Ttl>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8 }}>
+          {Object.entries(s.academics).map(([sub,score])=>(
+            <div key={sub} style={{ background:score>=90?"#F0FFF4":score>=75?"#EBF8FF":"#FFF5F5",
+              borderRadius:10, padding:"10px 8px", textAlign:"center" }}>
+              <div style={{ fontSize:18, fontWeight:900, color:score>=90?"#38A169":score>=75?"#3182CE":"#E53E3E" }}>{score}</div>
+              <div style={{ fontSize:10, color:"#94a3b8", fontWeight:600 }}>{sub}</div>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      {/* Activities */}
+      <Card>
+        <Ttl>🎯 Enrolled Activities</Ttl>
+        <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+          {s.activities.map(a=>(
+            <div key={a} style={{ padding:"8px 14px", borderRadius:20, background:h.light,
+              color:h.color, fontSize:12, fontWeight:700, border:`1.5px solid ${h.accent}` }}>{a}</div>
+          ))}
+        </div>
+      </Card>
+
+      {/* Notices */}
+      <Card>
+        <Ttl>🔔 School Notices</Ttl>
+        {notices.map((n,i)=>(
+          <div key={i} style={{ display:"flex", gap:10, padding:"10px 0",
+            borderBottom:i<notices.length-1?"1px solid #f1f5f9":"none" }}>
+            <div style={{ fontSize:20 }}>{n.icon}</div>
+            <div style={{ flex:1 }}>
+              <div style={{ fontSize:12, color:"#1e293b", fontWeight:600 }}>{n.text}</div>
+              <div style={{ fontSize:10, color:"#94a3b8", marginTop:2 }}>{n.time}</div>
+            </div>
+          </div>
+        ))}
+      </Card>
+
+      {/* Quick Actions */}
+      <Card>
+        <Ttl>⚡ Quick Actions</Ttl>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+          {[["📄","Download Report"],["💳","Pay Fees"],["📞","Contact Teacher"],["📅","Book PTM Slot"]].map(([icon,label])=>(
+            <button key={label} style={{ padding:"14px 10px", borderRadius:12, border:"1.5px solid #e2e8f0",
+              background:"#f8fafc", cursor:"pointer", fontFamily:font }}>
+              <div style={{ fontSize:22 }}>{icon}</div>
+              <div style={{ fontSize:11, fontWeight:700, color:"#475569", marginTop:4 }}>{label}</div>
+            </button>
+          ))}
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+function ParentEvents({ events }) {
+  return <StudentEvents events={events} />;
+}
+
+// ─── TEACHER / ADMIN SCREENS ─────────────────────────────────────────────────
+
+function AdminPanel({ students, setStudents, housePoints, setHousePoints, events, setEvents }) {
+  const [tab, setTab]     = useState("marks");
+  const [toast, setToast] = useState("");
+
+  const showToast = (msg) => { setToast(msg); setTimeout(()=>setToast(""),2500); };
+
+  // Marks
+  const [selId, setSelId]   = useState(students[0].id);
+  const [marks, setMarks]   = useState({...students[0].academics});
+  const loadStudent = (id) => { const s=students.find(x=>x.id===Number(id)); setSelId(Number(id)); setMarks({...s.academics}); };
+  const saveMark = () => { setStudents(p=>p.map(s=>s.id===selId?{...s,academics:{...marks}}:s)); showToast("Marks saved!"); };
+
+  // Attendance
+  const [attId, setAttId]   = useState(students[0].id);
+  const [attVal, setAttVal] = useState(students[0].attendance);
+  const loadAtt = (id) => { setAttId(Number(id)); setAttVal(students.find(x=>x.id===Number(id))?.attendance||0); };
+  const saveAtt = () => { setStudents(p=>p.map(s=>s.id===attId?{...s,attendance:Number(attVal)}:s)); showToast("Attendance updated!"); };
+
+  // House points
+  const [houseAdd, setHouseAdd] = useState({Red:0,Blue:0,Green:0,Yellow:0});
+  const saveHouse = () => {
+    setHousePoints(p=>{const n={...p};Object.keys(houseAdd).forEach(k=>{n[k]=p[k]+Number(houseAdd[k]||0);});return n;});
+    setHouseAdd({Red:0,Blue:0,Green:0,Yellow:0}); showToast("House points updated!");
+  };
+
+  // Student points
+  const [ptId, setPtId]         = useState(students[0].id);
+  const [ptAdd, setPtAdd]       = useState("");
+  const [ptReason, setPtReason] = useState("");
+  const savePt = () => {
+    if(!ptAdd) return;
+    setStudents(p=>p.map(s=>s.id===Number(ptId)?{...s,points:s.points+Number(ptAdd)}:s));
+    setPtAdd(""); setPtReason(""); showToast("Points awarded!");
+  };
+
+  // Events
+  const [ev, setEv] = useState({title:"",date:"",category:"Academic",desc:"",icon:"🎯"});
+  const addEvent = () => {
+    if(!ev.title||!ev.date) return;
+    setEvents(p=>[...p,{...ev,id:Date.now()}]);
+    setEv({title:"",date:"",category:"Academic",desc:"",icon:"🎯"}); showToast("Event added!");
+  };
+
+  const adminTabs = [
+    {id:"marks",  icon:"📝", label:"Marks"},
+    {id:"attend", icon:"📅", label:"Attend."},
+    {id:"house",  icon:"🏆", label:"House Pts"},
+    {id:"spts",   icon:"⭐", label:"Stu. Pts"},
+    {id:"events", icon:"🎯", label:"Events"},
+  ];
+
+  const curStudent  = students.find(s=>s.id===selId)||students[0];
+  const attStudent  = students.find(s=>s.id===attId)||students[0];
+  const ptStudent   = students.find(s=>s.id===Number(ptId))||students[0];
+  const studentOpts = students.map(s=>({value:s.id,label:`${s.name} (${s.class})`}));
+  const medals      = ["🥇","🥈","🥉","🏅"];
+
+  return (
+    <div style={{ padding:"16px 16px 90px", display:"flex", flexDirection:"column", gap:14, fontFamily:font }}>
+      <Toast msg={toast} />
+
+      {/* Header */}
+      <Card style={{ background:"linear-gradient(135deg,#1a1a2e,#16213e)", color:"white" }}>
+        <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:16 }}>
+          <div style={{ width:44, height:44, borderRadius:12, background:"rgba(255,255,255,0.1)",
+            display:"flex", alignItems:"center", justifyContent:"center", fontSize:22 }}>📋</div>
+          <div>
+            <div style={{ fontSize:16, fontWeight:800 }}>Teacher Admin Panel</div>
+            <div style={{ fontSize:11, opacity:0.6 }}>St. Stephen's · Manage Live Data</div>
+          </div>
+        </div>
+        <div style={{ display:"flex", gap:8 }}>
+          {[[`${students.length}`,"Students","👩‍🎓"],
+            [`${Object.values(housePoints).reduce((a,b)=>a+b,0).toLocaleString()}`,"Total Pts","🏆"],
+            [`${events.length}`,"Events","📅"]].map(([v,l,icon])=>(
+            <div key={l} style={{ flex:1, background:"rgba(255,255,255,0.08)", borderRadius:10, padding:"8px", textAlign:"center" }}>
+              <div style={{ fontSize:14 }}>{icon}</div>
+              <div style={{ fontSize:15, fontWeight:900, marginTop:2 }}>{v}</div>
+              <div style={{ fontSize:9, opacity:0.6, fontWeight:700 }}>{l}</div>
+            </div>
+          ))}
+        </div>
+      </Card>
+
+      {/* Sub-tabs */}
+      <div style={{ display:"flex", gap:6, overflowX:"auto", paddingBottom:2 }}>
+        {adminTabs.map(t=>(
+          <button key={t.id} onClick={()=>setTab(t.id)} style={{ padding:"8px 12px", borderRadius:20, border:"none",
+            cursor:"pointer", whiteSpace:"nowrap", background:tab===t.id?"#1a1a2e":"#f1f5f9",
+            color:tab===t.id?"white":"#64748b", fontWeight:700, fontSize:11, fontFamily:font }}>
+            {t.icon} {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* MARKS */}
+      {tab==="marks" && (
+        <Card>
+          <Ttl>📝 Enter / Update Marks</Ttl>
+          <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+            <Sel label="Select Student" value={selId} onChange={e=>loadStudent(e.target.value)} options={studentOpts} />
+            <div style={{ background:"#f8fafc", borderRadius:12, padding:12 }}>
+              <div style={{ fontSize:12, fontWeight:700, color:"#64748b", marginBottom:10 }}>
+                {curStudent.name} · Class {curStudent.class} · {HOUSES[curStudent.house].emoji} {curStudent.house} House
+              </div>
+              {SUBJECTS.map(sub=>(
+                <div key={sub} style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}>
+                  <div style={{ width:60, fontSize:12, fontWeight:700, color:"#475569" }}>{sub}</div>
+                  <input type="number" min="0" max="100" value={marks[sub]||""}
+                    onChange={e=>setMarks(p=>({...p,[sub]:Number(e.target.value)}))}
+                    style={{ flex:1, padding:"9px 10px", borderRadius:8, border:"1.5px solid #e2e8f0",
+                      fontSize:15, fontFamily:font, textAlign:"center", fontWeight:800, color:"#1e293b", background:"white" }} />
+                  <div style={{ fontSize:11, fontWeight:800, width:28,
+                    color:(marks[sub]||0)>=90?"#38A169":(marks[sub]||0)>=75?"#3182CE":"#E53E3E" }}>
+                    {(marks[sub]||0)>=90?"A+":(marks[sub]||0)>=75?"B":"C"}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <Btn onClick={saveMark}>Save Marks ✓</Btn>
+          </div>
+        </Card>
+      )}
+
+      {/* ATTENDANCE */}
+      {tab==="attend" && (
+        <Card>
+          <Ttl>📅 Update Attendance</Ttl>
+          <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+            <Sel label="Select Student" value={attId} onChange={e=>loadAtt(e.target.value)} options={studentOpts} />
+            <div style={{ background:"#f8fafc", borderRadius:12, padding:12 }}>
+              <div style={{ fontSize:12, fontWeight:700, color:"#64748b", marginBottom:4 }}>{attStudent.name}</div>
+              <div style={{ fontSize:11, color:"#94a3b8", marginBottom:12 }}>Current: {attStudent.attendance}%</div>
+              <Inp label="New Attendance %" type="number" value={attVal} onChange={e=>setAttVal(e.target.value)} placeholder="0–100" />
+              <div style={{ marginTop:10, background:"#f1f5f9", borderRadius:8, height:12, overflow:"hidden" }}>
+                <div style={{ height:"100%", width:`${Math.min(attVal,100)}%`,
+                  background:attVal>=90?"#38A169":attVal>=75?"#D69E2E":"#E53E3E", borderRadius:8, transition:"width 0.4s" }} />
+              </div>
+              <div style={{ fontSize:13, fontWeight:800, color:attVal>=90?"#38A169":attVal>=75?"#D69E2E":"#E53E3E", marginTop:6, textAlign:"right" }}>{attVal}%</div>
+            </div>
+            <Btn onClick={saveAtt}>Update Attendance ✓</Btn>
+          </div>
+        </Card>
+      )}
+
+      {/* HOUSE POINTS */}
+      {tab==="house" && (
+        <Card>
+          <Ttl>🏆 Award House Points</Ttl>
+          <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+            {Object.entries(housePoints).map(([name,pts])=>{
+              const h=HOUSES[name];
+              return (
+                <div key={name} style={{ background:h.light, borderRadius:12, padding:12, border:`1.5px solid ${h.accent}` }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
+                    <div style={{ fontSize:14, fontWeight:800, color:h.color }}>{h.emoji} {name} House</div>
+                    <div style={{ fontSize:18, fontWeight:900, color:h.color }}>{pts.toLocaleString()}</div>
+                  </div>
+                  <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+                    <input type="number" placeholder="+ Add points" value={houseAdd[name]||""}
+                      onChange={e=>setHouseAdd(p=>({...p,[name]:e.target.value}))}
+                      style={{ flex:1, padding:"9px 10px", borderRadius:8, border:`1.5px solid ${h.accent}`,
+                        fontSize:14, fontFamily:font, color:h.color, fontWeight:800, background:"white" }} />
+                    <span style={{ fontSize:12, fontWeight:700, color:h.color }}>pts</span>
+                  </div>
+                </div>
+              );
+            })}
+            <Btn onClick={saveHouse}>Save House Points ✓</Btn>
+          </div>
+        </Card>
+      )}
+
+      {/* STUDENT POINTS */}
+      {tab==="spts" && (
+        <Card>
+          <Ttl>⭐ Award Student Points</Ttl>
+          <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+            <Sel label="Select Student" value={ptId} onChange={e=>setPtId(e.target.value)} options={studentOpts} />
+            <div style={{ background:HOUSES[ptStudent.house].light, borderRadius:10, padding:12,
+              border:`1.5px solid ${HOUSES[ptStudent.house].accent}` }}>
+              <div style={{ display:"flex", justifyContent:"space-between" }}>
+                <span style={{ fontSize:13, fontWeight:700 }}>{ptStudent.name}</span>
+                <span style={{ fontSize:16, fontWeight:900, color:HOUSES[ptStudent.house].color }}>{ptStudent.points} pts</span>
+              </div>
+            </div>
+            <Inp label="Points to Award" type="number" value={ptAdd} onChange={e=>setPtAdd(e.target.value)} placeholder="e.g. 10" />
+            <Inp label="Reason" value={ptReason} onChange={e=>setPtReason(e.target.value)} placeholder="e.g. Won science quiz" />
+            <Btn onClick={savePt} bg="#38A169">Award Points ✓</Btn>
+          </div>
+          <div style={{ marginTop:18 }}>
+            <div style={{ fontSize:11, fontWeight:800, color:"#94a3b8", marginBottom:10, textTransform:"uppercase", letterSpacing:1 }}>Current Rankings</div>
+            {[...students].sort((a,b)=>b.points-a.points).map((s,i)=>{
+              const h=HOUSES[s.house];
+              return (
+                <div key={s.id} style={{ display:"flex", alignItems:"center", gap:8, padding:"8px 0",
+                  borderBottom:i<students.length-1?"1px solid #f1f5f9":"none" }}>
+                  <div style={{ fontSize:14, width:22 }}>{medals[i]||`${i+1}.`}</div>
+                  <div style={{ flex:1, fontSize:12, fontWeight:700, color:"#1e293b" }}>{s.name}</div>
+                  <Badge text={`${h.emoji} ${s.house}`} color={h.color} bg={h.light} />
+                  <div style={{ fontSize:13, fontWeight:800, color:h.color }}>{s.points}</div>
+                </div>
+              );
+            })}
+          </div>
+        </Card>
+      )}
+
+      {/* EVENTS */}
+      {tab==="events" && (
+        <Card>
+          <Ttl>🎯 Add New Event</Ttl>
+          <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+            <Inp label="Event Title" value={ev.title} onChange={e=>setEv(p=>({...p,title:e.target.value}))} placeholder="e.g. Annual Sports Day" />
+            <Inp label="Date" type="date" value={ev.date} onChange={e=>setEv(p=>({...p,date:e.target.value}))} />
+            <Sel label="Category" value={ev.category} onChange={e=>setEv(p=>({...p,category:e.target.value}))} options={["Academic","Sports","Cultural"]} />
+            <Inp label="Description" value={ev.desc} onChange={e=>setEv(p=>({...p,desc:e.target.value}))} placeholder="Short description" />
+            <Sel label="Icon" value={ev.icon} onChange={e=>setEv(p=>({...p,icon:e.target.value}))} options={["🎯","🔬","🏏","🎭","📐","🏃","🎨","🎵","🏀","🌍"]} />
+            <Btn onClick={addEvent} bg="#3182CE">Add Event ✓</Btn>
+          </div>
+          <div style={{ marginTop:18 }}>
+            <div style={{ fontSize:11, fontWeight:800, color:"#94a3b8", marginBottom:10, textTransform:"uppercase", letterSpacing:1 }}>All Events ({events.length})</div>
+            {events.map((e,i)=>(
+              <div key={e.id} style={{ display:"flex", gap:10, padding:"10px 0",
+                borderBottom:i<events.length-1?"1px solid #f1f5f9":"none", alignItems:"center" }}>
+                <div style={{ fontSize:22 }}>{e.icon}</div>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontSize:13, fontWeight:700, color:"#1e293b" }}>{e.title}</div>
+                  <div style={{ fontSize:11, color:"#94a3b8" }}>{e.date} · {e.category}</div>
+                </div>
+                <button onClick={()=>setEvents(p=>p.filter(x=>x.id!==e.id))}
+                  style={{ background:"#FFF5F5", border:"none", color:"#E53E3E", borderRadius:8,
+                    padding:"4px 8px", cursor:"pointer", fontFamily:font, fontWeight:700, fontSize:11 }}>✕</button>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+
+// ─── Study / Learn Screen ─────────────────────────────────────────────────────
+
+const SYLLABUS = {
+  Mathematics: {
+    icon:"📐", color:"#3182CE", light:"#EBF8FF",
+    exam:"Paper I (Algebra & Geometry) + Paper II (Arithmetic & Advanced Topics) | 100 marks | 3 hrs each",
+    sections:[
+      {
+        title:"Paper I — Algebra, Coordinate Geometry & Triangles",
+        chapters:[
+          { id:"M1", title:"Real Numbers",
+            topics:["Properties of real numbers","Rational & irrational numbers","Decimal expansions","Euclid's Division Lemma","Fundamental Theorem of Arithmetic"],
+            ytQuery:"class 9 real numbers telangana state board english medium",
+            notes:"Real Numbers form the foundation of Class 9 Maths. Key areas: understanding rational vs irrational numbers (e.g. √2 is irrational), decimal expansions (terminating, non-terminating repeating), Euclid's Division Lemma (a = bq + r), and the Fundamental Theorem of Arithmetic (every number has a unique prime factorisation). Practise converting decimals to fractions and proving irrationality."
+          },
+          { id:"M2", title:"Polynomials and Factorisation",
+            topics:["Zeroes of a polynomial","Remainder theorem","Factor theorem","Algebraic identities","Factorisation methods"],
+            ytQuery:"class 9 polynomials factorisation remainder factor theorem telangana",
+            notes:"A polynomial is an expression like 3x² + 2x − 5. Key concepts: zero of a polynomial (value of x that makes it 0), Remainder Theorem (remainder when p(x) is divided by (x−a) is p(a)), Factor Theorem (if p(a)=0 then (x−a) is a factor). Learn the standard identities: (a+b)², (a−b)², (a+b)³, (a³−b³) etc. Practise factorisation by splitting middle term."
+          },
+          { id:"M3", title:"Coordinate Geometry",
+            topics:["Cartesian plane","Plotting points","Distance formula","Section formula","Midpoint formula"],
+            ytQuery:"class 9 coordinate geometry distance formula section formula telangana",
+            notes:"Coordinate Geometry links algebra with geometry on the XY plane. Key skills: plotting points (x,y), Distance formula d=√[(x₂−x₁)²+(y₂−y₁)²], Section formula for dividing a line in ratio m:n, Midpoint formula M=((x₁+x₂)/2, (y₁+y₂)/2). Learn to find collinearity of three points using distance formula. Very important for both Papers."
+          },
+          { id:"M4", title:"Linear Equations in Two Variables",
+            topics:["Graphical method","Substitution method","Elimination method","Cross multiplication","Conditions for consistency"],
+            ytQuery:"class 9 linear equations two variables graphical substitution elimination telangana",
+            notes:"Linear equations of the form ax+by+c=0 represent straight lines on a graph. Two equations form a system — solve by: (1) Graphical method (intersection point), (2) Substitution, (3) Elimination, (4) Cross multiplication. Three possibilities: unique solution (lines intersect), no solution (parallel lines), infinite solutions (same line). Conditions: a₁/a₂ ≠ b₁/b₂ for unique solution."
+          },
+          { id:"M5", title:"Triangles",
+            topics:["Congruence criteria (SSS,SAS,ASA,RHS)","Similarity criteria (AA,SSS,SAS)","Basic Proportionality Theorem","Pythagoras Theorem","Angle Bisector Theorem"],
+            ytQuery:"class 9 triangles congruence similarity BPT pythagoras telangana",
+            notes:"Two triangles are congruent if they are identical in shape and size (CPCT). Criteria: SSS, SAS, ASA, AAS, RHS. Two triangles are similar if angles are equal and sides are proportional. Basic Proportionality Theorem (Thales): a line parallel to one side of a triangle divides the other two sides proportionally. Pythagoras: In a right triangle, hypotenuse² = base² + height²."
+          },
+          { id:"M6", title:"Quadrilaterals and Areas",
+            topics:["Properties of parallelogram","Rectangle, Rhombus, Square","Trapezium","Mid-Point Theorem","Area theorems"],
+            ytQuery:"class 9 quadrilaterals parallelogram properties mid point theorem telangana",
+            notes:"A quadrilateral has 4 sides. Special ones: Parallelogram (opposite sides parallel & equal), Rectangle (all angles 90°), Rhombus (all sides equal), Square (all sides equal + all angles 90°), Trapezium (one pair parallel). Mid-Point Theorem: Line joining midpoints of two sides of a triangle is parallel to 3rd side and half its length. Triangles on same base and between same parallels have equal area."
+          },
+        ]
+      },
+      {
+        title:"Paper II — Statistics, Mensuration & Trigonometry",
+        chapters:[
+          { id:"M7", title:"Statistics",
+            topics:["Mean (direct, assumed mean, step deviation)","Median (grouped data)","Mode (grouped data)","Frequency distribution table","Histograms and Ogives"],
+            ytQuery:"class 9 statistics mean median mode frequency distribution histogram telangana",
+            notes:"Statistics deals with data collection and analysis. Mean = Σfx/Σf (for grouped data, use midpoints). Median for grouped data uses the formula: L + ((n/2−cf)/f)×h. Mode = L + ((f₁−f₀)/(2f₁−f₀−f₂))×h. Draw histograms for frequency distribution and ogive (cumulative frequency curve) for median. These are high-scoring topics — practise all three types of problems."
+          },
+          { id:"M8", title:"Surface Areas and Volumes",
+            topics:["Cuboid and Cube","Right circular cylinder","Right circular cone","Sphere and hemisphere","Combined solids"],
+            ytQuery:"class 9 surface area volume cylinder cone sphere cuboid telangana",
+            notes:"Formulae to memorise — Cuboid: LSA=2h(l+b), TSA=2(lb+bh+hl), V=lbh. Cylinder: CSA=2πrh, TSA=2πr(r+h), V=πr²h. Cone: CSA=πrl, TSA=πr(r+l), V=⅓πr²h where l=slant height=√(r²+h²). Sphere: SA=4πr², V=4/3πr³. Hemisphere: CSA=2πr², TSA=3πr², V=2/3πr³. For combined solids, add or subtract volumes as needed."
+          },
+          { id:"M9", title:"Circles",
+            topics:["Chord properties","Equal chords and distances","Angle subtended by arc","Cyclic quadrilateral","Tangents to circle"],
+            ytQuery:"class 9 circles chords tangent cyclic quadrilateral theorems telangana",
+            notes:"Key circle theorems: Equal chords are equidistant from centre. Angle subtended by an arc at centre is double the angle at any point on the remaining part. Angles in the same segment are equal. Opposite angles of a cyclic quadrilateral are supplementary (add to 180°). Tangent is perpendicular to radius at point of contact. Two tangents from an external point are equal in length."
+          },
+          { id:"M10", title:"Introduction to Trigonometry",
+            topics:["Trigonometric ratios (sin,cos,tan)","Reciprocal ratios (cosec,sec,cot)","Trigonometric identities","Values of standard angles (0°,30°,45°,60°,90°)","Applications — heights & distances"],
+            ytQuery:"class 9 trigonometry ratios identities standard angles heights distances telangana",
+            notes:"Trigonometry studies relationships between sides and angles of right triangles. sin θ = opposite/hypotenuse, cos θ = adjacent/hypotenuse, tan θ = opposite/adjacent. Reciprocals: cosec, sec, cot. Key identity: sin²θ + cos²θ = 1. Standard values: sin30°=1/2, sin45°=1/√2, sin60°=√3/2, sin90°=1. Use these for heights & distances problems (angle of elevation/depression)."
+          },
+          { id:"M11", title:"Mathematical Modelling",
+            topics:["Real-life problem solving","Formulating mathematical models","Interpreting solutions","Limitations of models"],
+            ytQuery:"class 9 mathematical modelling real life problems telangana",
+            notes:"Mathematical modelling is the process of translating a real-world problem into a mathematical form, solving it, and interpreting results back in context. Steps: (1) Identify the problem, (2) Formulate mathematical equations, (3) Solve, (4) Interpret, (5) Validate. Example: predicting population growth, calculating cost optimisation. This chapter develops analytical thinking."
+          },
+          { id:"M12", title:"Proofs in Mathematics",
+            topics:["Mathematical statements","Direct proof","Indirect proof (contradiction)","Proof by cases","Counterexamples"],
+            ytQuery:"class 9 proofs in mathematics direct indirect proof contradiction telangana",
+            notes:"A mathematical proof is a logical argument that establishes truth. Direct proof: assume the hypothesis and derive the conclusion step by step. Indirect proof (contradiction): assume the conclusion is false and derive a contradiction. Counterexample: a single example that disproves a universal statement. Understanding proofs is essential for higher mathematics — practise writing proofs for theorems you have studied."
+          },
+        ]
+      },
+    ]
+  },
+
+  "Physical Science": {
+    icon:"⚗️", color:"#38A169", light:"#F0FFF4",
+    exam:"Paper I | 50 marks | 2.5 hrs",
+    sections:[
+      {
+        title:"Physics",
+        chapters:[
+          { id:"PS1", title:"Motion",
+            topics:["Distance vs Displacement","Speed vs Velocity","Acceleration","Distance-Time and Velocity-Time graphs","Equations of motion","Uniform circular motion"],
+            ytQuery:"class 9 motion distance displacement velocity acceleration equations telangana",
+            notes:"Motion is the change in position of an object with time. Distance (scalar) vs Displacement (vector — shortest path). Speed = Distance/Time; Velocity = Displacement/Time. Acceleration = Change in velocity/Time. Three equations of motion: v=u+at, s=ut+½at², v²=u²+2as. Graphs: Distance-Time (slope=speed), Velocity-Time (slope=acceleration, area=displacement). Uniform circular motion has constant speed but changing direction."
+          },
+          { id:"PS2", title:"Laws of Motion",
+            topics:["Newton's First Law — Inertia","Newton's Second Law — F=ma","Newton's Third Law — Action-Reaction","Linear momentum","Impulse","Conservation of momentum"],
+            ytQuery:"class 9 Newton laws of motion momentum impulse telangana physics",
+            notes:"Newton's 1st Law: An object remains at rest or in uniform motion unless acted upon by an external force (Law of Inertia). 2nd Law: Force = mass × acceleration (F=ma) — defines force quantitatively. 3rd Law: Every action has an equal and opposite reaction. Momentum p = mv. Impulse = F×t = change in momentum. Conservation of momentum: In absence of external force, total momentum of system remains constant."
+          },
+          { id:"PS3", title:"Gravitation",
+            topics:["Universal Law of Gravitation (F=Gm₁m₂/r²)","Acceleration due to gravity (g=9.8 m/s²)","Free fall","Mass vs Weight","Orbital motion of planets","Escape velocity"],
+            ytQuery:"class 9 gravitation universal law free fall weight mass telangana",
+            notes:"Newton's Universal Law: F = Gm₁m₂/r² where G = 6.67×10⁻¹¹ Nm²/kg². Every object attracts every other object. g = GM/R² ≈ 9.8 m/s² on Earth's surface. Free fall: only gravity acts (air resistance neglected). Weight W = mg (varies with location); Mass is constant. Moon's gravity = g/6. Orbital motion: satellite in circular orbit — gravitational force provides centripetal force."
+          },
+          { id:"PS4", title:"Refraction of Light at Plane Surfaces",
+            topics:["Refraction phenomenon","Snell's Law (n₁sinθ₁=n₂sinθ₂)","Refractive index","Total Internal Reflection (TIR)","Critical angle","Optical fibres"],
+            ytQuery:"class 9 refraction light snell's law refractive index TIR telangana",
+            notes:"Refraction is the bending of light as it passes from one medium to another due to change in speed. Snell's Law: n₁sinθ₁ = n₂sinθ₂. Refractive index n = speed of light in vacuum / speed of light in medium. When light goes from denser to rarer medium and angle of incidence exceeds critical angle, TIR occurs (no refraction — total reflection). Applications: optical fibres, diamonds, mirages."
+          },
+          { id:"PS5", title:"Floating Bodies",
+            topics:["Thrust and Pressure","Pressure in fluids","Archimedes' Principle","Buoyancy and upthrust","Law of floatation","Relative density"],
+            ytQuery:"class 9 floating bodies Archimedes principle buoyancy pressure fluids telangana",
+            notes:"Pressure = Force/Area (Pa). Fluid pressure increases with depth: P = ρgh. Archimedes' Principle: When a body is immersed in a fluid, it experiences an upward force (buoyancy) equal to the weight of fluid displaced. Law of Floatation: an object floats when buoyant force = weight of object. Objects with density less than water float. Relative density = density of substance / density of water."
+          },
+          { id:"PS6", title:"Work and Energy",
+            topics:["Work done (W=Fs cosθ)","Kinetic Energy (KE=½mv²)","Potential Energy (PE=mgh)","Work-Energy theorem","Law of Conservation of Energy","Power (P=W/t)"],
+            ytQuery:"class 9 work energy power kinetic potential conservation telangana",
+            notes:"Work = Force × displacement × cosθ (SI unit: Joule). No work if force and displacement are perpendicular. KE = ½mv². PE = mgh (gravitational). Work-Energy Theorem: Net work done = change in KE. Law of Conservation of Energy: Energy can neither be created nor destroyed — only converted. Power = Work/Time (Watt). 1 kWh = 3.6×10⁶ J (commercial unit of energy)."
+          },
+          { id:"PS7", title:"Heat",
+            topics:["Temperature scales","Thermal expansion (solid,liquid,gas)","Specific heat capacity","Calorimetry","Latent heat","Change of state"],
+            ytQuery:"class 9 heat temperature thermal expansion specific heat latent heat telangana",
+            notes:"Heat is a form of energy (Joule); Temperature measures degree of hotness (Kelvin, Celsius). Thermal expansion: solids expand least, gases expand most. Specific heat c = heat required to raise 1 kg by 1°C. Calorimetry: heat gained = heat lost (Q = mcΔT). Latent heat: heat absorbed/released during change of state at constant temperature. Latent heat of fusion (ice→water) = 3.36×10⁵ J/kg."
+          },
+          { id:"PS8", title:"Sound",
+            topics:["Production and propagation of sound","Longitudinal waves","Amplitude, Frequency, Wavelength","Speed of sound in different media","Echo and reverberation","SONAR","Human ear"],
+            ytQuery:"class 9 sound waves echo SONAR characteristics speed telangana",
+            notes:"Sound is a longitudinal mechanical wave — needs a medium to travel. Speed: fastest in solids > liquids > gases. At 25°C, speed in air ≈ 346 m/s. Wave terms: Frequency (Hz), Amplitude (loudness), Wavelength (λ), v=fλ. Echo: sound reflected after 0.1s (minimum distance = 17.2m). Reverberation: persistence of sound. SONAR uses ultrasound to detect underwater objects. Audible range: 20 Hz–20,000 Hz."
+          },
+        ]
+      },
+      {
+        title:"Chemistry",
+        chapters:[
+          { id:"CH1", title:"Matter Around Us",
+            topics:["States of matter — solid,liquid,gas","Interconversion of states","Effect of temperature and pressure","Plasma state","Bose-Einstein Condensate (BEC)"],
+            ytQuery:"class 9 matter states solid liquid gas plasma BEC interconversion telangana",
+            notes:"Matter exists in 5 states. Solid: fixed shape & volume (strong intermolecular forces). Liquid: fixed volume, no fixed shape. Gas: no fixed shape or volume. Changes of state: melting, freezing, evaporation, condensation, sublimation (direct solid↔gas). Plasma: ionised gas at very high temperatures (sun, lightning). BEC: formed near absolute zero (−273°C) — 5th state discovered in 1995. Pressure and temperature affect state changes."
+          },
+          { id:"CH2", title:"Is Matter Pure?",
+            topics:["Pure substances vs Mixtures","Homogeneous and heterogeneous mixtures","Solutions — solute & solvent","Colloids and suspensions","Separation techniques"],
+            ytQuery:"class 9 pure substances mixtures solutions colloids separation techniques telangana",
+            notes:"Pure substance: has definite composition (element or compound). Mixture: two or more substances combined, no fixed ratio. Homogeneous (same composition throughout — e.g. salt solution) vs Heterogeneous (different parts visible — e.g. sand+water). Solution: solute dissolved in solvent. Colloid: particle size 1–1000 nm (e.g. milk, fog) — shows Tyndall effect. Suspensions: large particles, settle on standing. Separation: distillation, evaporation, chromatography, centrifugation."
+          },
+          { id:"CH3", title:"Atoms and Molecules",
+            topics:["Laws of chemical combination (Law of Conservation of Mass, Law of Definite Proportions)","Dalton's Atomic Theory","Atomic mass and molecular mass","Chemical formulae","Mole concept (1 mole = 6.022×10²³)"],
+            ytQuery:"class 9 atoms molecules mole concept Dalton atomic mass chemical formula telangana",
+            notes:"Law of Conservation of Mass: matter is neither created nor destroyed in a chemical reaction. Law of Definite Proportions: a compound always contains same elements in same mass ratio. Dalton's theory: all matter made of indivisible atoms. Atomic mass unit (amu). Molecular formula gives exact number of atoms. Mole concept: 1 mole = 6.022×10²³ particles (Avogadro's number). Molar mass = mass of 1 mole in grams = atomic/molecular mass in grams."
+          },
+          { id:"CH4", title:"What Is Inside the Atom?",
+            topics:["Subatomic particles — proton, neutron, electron","Thomson's Plum Pudding model","Rutherford's Nuclear model","Bohr's model of atom","Atomic number and Mass number","Isotopes and Isobars","Valency and electron configuration"],
+            ytQuery:"class 9 atomic structure Thomson Rutherford Bohr model isotopes isobars telangana",
+            notes:"Atom has nucleus (protons + neutrons) and electrons orbiting outside. Thomson: positive sphere with electrons embedded ('plum pudding'). Rutherford (gold foil experiment): small, dense, positive nucleus. Bohr: electrons in fixed orbits (shells K,L,M,N). Atomic number (Z) = number of protons. Mass number (A) = protons + neutrons. Isotopes: same Z, different A (e.g. ¹²C and ¹⁴C). Isobars: same A, different Z. Valency = electrons in outermost shell (or 8−outermost electrons)."
+          },
+        ]
+      },
+    ]
+  },
+
+  "Biological Science": {
+    icon:"🧬", color:"#805AD5", light:"#FAF5FF",
+    exam:"Paper II | 50 marks | 2.5 hrs",
+    sections:[
+      {
+        title:"Cell Biology & Tissues",
+        chapters:[
+          { id:"B1", title:"Cell — Its Structure and Functions",
+            topics:["Prokaryotic vs Eukaryotic cells","Cell organelles — nucleus, mitochondria, chloroplast, Golgi body, ER","Cell wall and cell membrane","Vacuoles and lysosomes","Differences between plant and animal cells"],
+            ytQuery:"class 9 cell structure functions organelles prokaryotic eukaryotic telangana",
+            notes:"Cell is the basic structural and functional unit of life. Prokaryotes (bacteria) have no membrane-bound nucleus. Eukaryotes (plants, animals) have true nucleus. Key organelles: Nucleus (control centre, contains DNA), Mitochondria ('powerhouse' — produces ATP), Chloroplast (photosynthesis in plants), Ribosome (protein synthesis), ER (transport), Golgi body (packaging). Plant cells have: cell wall (cellulose), chloroplasts, large central vacuole. Animal cells have: centrioles, small vacuoles."
+          },
+          { id:"B2", title:"Plasma Membrane",
+            topics:["Fluid mosaic model","Osmosis and diffusion","Hypotonic, Hypertonic, Isotonic solutions","Plasmolysis","Active transport vs Passive transport"],
+            ytQuery:"class 9 plasma membrane osmosis diffusion active passive transport telangana",
+            notes:"Plasma membrane is selectively permeable — allows some substances to pass. Fluid Mosaic Model: phospholipid bilayer with embedded proteins. Diffusion: movement of molecules from high to low concentration (no energy). Osmosis: movement of water from high water concentration to low water concentration through semi-permeable membrane. Hypotonic solution → cell swells (endosmosis). Hypertonic → cell shrinks (exosmosis/plasmolysis). Active transport: against concentration gradient, requires energy (ATP)."
+          },
+          { id:"B3", title:"Plant Tissues",
+            topics:["Meristematic tissues (Apical, Lateral, Intercalary)","Permanent tissues — Simple (Parenchyma, Collenchyma, Sclerenchyma)","Complex tissues — Xylem and Phloem","Protective tissues — Epidermis"],
+            ytQuery:"class 9 plant tissues meristematic permanent xylem phloem telangana",
+            notes:"Meristematic tissues: actively dividing, found at root tip (apical), cambium (lateral), internodes (intercalary). Permanent tissues — Simple: Parenchyma (packing, photosynthesis), Collenchyma (flexibility), Sclerenchyma (strength, dead cells). Complex tissues — Xylem (transports water upward; tracheids, vessels, xylem fibres, xylem parenchyma), Phloem (transports food; sieve tubes, companion cells, phloem fibres). Epidermis: protective outer layer; has stomata in leaves for gaseous exchange."
+          },
+          { id:"B4", title:"Animal Tissues",
+            topics:["Epithelial tissues (Squamous, Cuboidal, Columnar, Ciliated)","Connective tissues (Blood, Bone, Cartilage, Adipose)","Muscular tissues (Striated, Smooth, Cardiac)","Nervous tissue (Neurons, Neuroglia)"],
+            ytQuery:"class 9 animal tissues epithelial connective muscular nervous telangana",
+            notes:"Epithelial: covers body surfaces and lines organs. Types: Squamous (skin), Cuboidal (kidney tubules), Columnar (intestine), Ciliated (respiratory tract). Connective: binds and supports. Blood (liquid connective tissue), Bone (rigid), Cartilage (flexible), Adipose (fat storage). Muscle: Striated/Skeletal (voluntary, attached to bones), Smooth/Unstriated (involuntary, in organs), Cardiac (involuntary, only in heart, rhythmic). Nervous: Neurons (nerve cells — dendrites, cell body, axon) transmit impulses; Neuroglia (support cells)."
+          },
+        ]
+      },
+      {
+        title:"Diversity & Ecosystems",
+        chapters:[
+          { id:"B5", title:"Diversity in Living Organisms",
+            topics:["Need for classification","Whittaker's Five Kingdom Classification (Monera,Protista,Fungi,Plantae,Animalia)","Hierarchy — Kingdom to Species","Binomial Nomenclature","Major phyla of animals","Major divisions of plants"],
+            ytQuery:"class 9 diversity living organisms five kingdom classification Whittaker telangana",
+            notes:"Classification helps us study the enormous variety of life forms systematically. Whittaker (1969) proposed 5 kingdoms: Monera (bacteria — prokaryotes), Protista (unicellular eukaryotes — Amoeba, Paramecium), Fungi (saprophytes — mushrooms, yeast), Plantae (multicellular, photosynthetic), Animalia (multicellular, heterotrophic). Hierarchy: Kingdom → Phylum → Class → Order → Family → Genus → Species. Binomial Nomenclature (Linnaeus): each organism has two-part Latin name (Genus species), e.g. Homo sapiens."
+          },
+          { id:"B6", title:"Adaptations in Different Ecosystems",
+            topics:["Desert adaptations (xerophytes, camels)","Aquatic adaptations (fish, aquatic plants)","Forest adaptations","Grassland adaptations","Polar adaptations"],
+            ytQuery:"class 9 adaptations ecosystems desert aquatic forest animals plants telangana",
+            notes:"Adaptation is any feature that helps an organism survive in its environment. Desert: plants (cacti) have thick stems to store water, spines instead of leaves to reduce water loss; animals (camel) have humps (fat storage), can tolerate dehydration. Aquatic: fish have streamlined bodies, gills, fins; aquatic plants have aerenchyma (air spaces). Forest: trees grow tall for sunlight, epiphytes grow on other plants. Polar: thick fur/blubber in animals like polar bears, seals."
+          },
+        ]
+      },
+      {
+        title:"Life Processes & Coordination",
+        chapters:[
+          { id:"B7", title:"Food — Why Do We Need It?",
+            topics:["Macronutrients — Carbohydrates, Proteins, Fats","Micronutrients — Vitamins, Minerals","Balanced diet","Deficiency diseases","Autotrophic vs Heterotrophic nutrition","Photosynthesis overview"],
+            ytQuery:"class 9 food nutrition balanced diet deficiency diseases photosynthesis telangana",
+            notes:"Food provides energy and raw materials for growth and repair. Macronutrients: Carbohydrates (energy — glucose, starch), Proteins (growth/repair — amino acids), Fats (energy storage, insulation). Micronutrients: Vitamins (A,B,C,D,E,K — various functions), Minerals (Ca, Fe, I — structural and enzymatic). Deficiency diseases: Vitamin C → Scurvy, Vitamin D → Rickets, Iron → Anaemia, Iodine → Goitre. Photosynthesis: 6CO₂+6H₂O → C₆H₁₂O₆+6O₂ (in presence of sunlight and chlorophyll)."
+          },
+          { id:"B8", title:"Respiration",
+            topics:["Aerobic vs Anaerobic respiration","Glycolysis (in cytoplasm)","Krebs cycle — introduction (in mitochondria)","ATP production","Breathing mechanism in humans","Exchange of gases"],
+            ytQuery:"class 9 respiration aerobic anaerobic glycolysis Krebs cycle ATP telangana",
+            notes:"Respiration releases energy from food. Aerobic: C₆H₁₂O₆+6O₂ → 6CO₂+6H₂O+38ATP (efficient, uses oxygen). Anaerobic: no oxygen — in yeast: glucose→ethanol+CO₂; in muscles: glucose→lactic acid (causes cramps). Glycolysis occurs in cytoplasm (glucose→pyruvate, 2ATP). Krebs cycle in mitochondria matrix. Breathing: diaphragm contracts (inhalation, lungs expand), relaxes (exhalation). Exchange of gases in alveoli by diffusion."
+          },
+          { id:"B9", title:"Transportation",
+            topics:["Blood composition (RBC, WBC, Platelets, Plasma)","Structure of heart (4 chambers)","Blood circulation — pulmonary and systemic","Blood vessels — arteries, veins, capillaries","Lymphatic system","Transport in plants — xylem and phloem"],
+            ytQuery:"class 9 transportation blood heart circulation lymph xylem phloem telangana",
+            notes:"Blood: Plasma (55% — liquid), RBC (haemoglobin, carries O₂), WBC (immunity), Platelets (clotting). Heart has 4 chambers: Right Atrium, Right Ventricle, Left Atrium, Left Ventricle. Pulmonary circulation: heart→lungs→heart. Systemic: heart→body→heart. Blood pressure: systolic (contraction)/diastolic (relaxation) — normal 120/80 mmHg. Arteries carry oxygenated blood (except pulmonary artery). Veins carry deoxygenated blood (except pulmonary vein). Lymph drains tissue fluid. In plants: xylem (water up by transpiration pull), phloem (food by pressure flow)."
+          },
+          { id:"B10", title:"Excretion",
+            topics:["Excretory organs in humans","Structure of kidney — nephron","Urine formation (filtration, reabsorption, secretion)","Haemodialysis","Excretion in plants (stomata, bark, leaves)"],
+            ytQuery:"class 9 excretion kidney nephron urine formation haemodialysis telangana",
+            notes:"Excretion removes metabolic waste. Human excretory organs: Kidneys (main — remove urea), Lungs (CO₂), Skin (sweat — water, salts), Liver (bile pigments). Kidney structure: cortex, medulla, pelvis. Functional unit: Nephron (Bowman's capsule, glomerulus, tubules). Urine formation: Filtration (blood filtered in Bowman's capsule), Reabsorption (useful substances taken back), Secretion (additional waste added). Haemodialysis: artificial kidney for patients with kidney failure. Plants excrete: O₂ and water vapour through stomata, CO₂ and excess water through stomata, stored wastes in leaves (shed) and bark."
+          },
+          { id:"B11", title:"Coordination",
+            topics:["Nervous system — CNS (brain,spinal cord) and PNS","Neuron structure and nerve impulse","Reflex action and reflex arc","Brain — cerebrum, cerebellum, medulla","Endocrine system — hormones","Major endocrine glands and hormones"],
+            ytQuery:"class 9 coordination nervous system neuron reflex arc endocrine hormones telangana",
+            notes:"Nervous system: CNS (brain + spinal cord) + PNS (spinal and cranial nerves). Neuron: dendrites (receive impulse) → cell body → axon → synapse → next neuron. Reflex action: automatic, involuntary response (spinal cord in charge). Reflex arc: receptor→sensory nerve→spinal cord→motor nerve→effector. Brain: Cerebrum (thinking, memory), Cerebellum (balance, posture), Medulla Oblongata (heart rate, breathing). Endocrine glands: Pituitary (master gland), Thyroid (thyroxine — metabolism), Adrenal (adrenaline — fight/flight), Pancreas (insulin/glucagon — blood sugar), Gonads (sex hormones)."
+          },
+        ]
+      },
+    ]
+  },
+
+  "Social Studies": {
+    icon:"🌍", color:"#D69E2E", light:"#FFFFF0",
+    exam:"Single Paper | 100 marks | 3 hrs",
+    sections:[
+      {
+        title:"History",
+        chapters:[
+          { id:"H1", title:"The French Revolution",
+            topics:["Causes — social inequality, financial crisis, weak monarchy","Events of 1789 — Estates General, Bastille, Declaration of Rights","Reign of Terror — Robespierre","Rise of Napoleon Bonaparte","Impact on the world"],
+            ytQuery:"class 9 french revolution causes events 1789 Napoleon telangana social studies",
+            notes:"French Revolution (1789) was a period of radical political and social transformation. Causes: Old Regime — three Estates (clergy, nobility, commoners), inequality and heavy taxes on Third Estate; financial crisis; weak King Louis XVI. Key events: Estates General (May 1789), Fall of Bastille (July 14, 1789 — symbolised fall of tyranny), Declaration of Rights of Man (liberty, equality, fraternity). Reign of Terror (1793–94): Robespierre executed thousands. Napoleon Bonaparte rose to power — modernised France but became a military dictator. Impact: spread ideas of liberty, nationalism, democracy across Europe."
+          },
+          { id:"H2", title:"Industrial Revolution",
+            topics:["Why Britain first?","New inventions — steam engine, spinning jenny","Factory system and urbanisation","Social changes — new classes, child labour","Spread to Europe and America"],
+            ytQuery:"class 9 industrial revolution Britain inventions factory system social changes telangana",
+            notes:"Industrial Revolution (18th–19th century) began in Britain. Reasons: coal/iron resources, colonial markets, stable government, agricultural revolution freed labour. Key inventions: James Watt's steam engine (1769), Spinning Jenny (Hargreaves), Power Loom. Factory system replaced cottage industries — workers moved to cities (urbanisation). New social classes emerged: capitalists (owners) and proletariat (workers). Child labour was rampant. Terrible living conditions in industrial cities. Spread to Belgium, France, Germany, USA by early 1800s."
+          },
+          { id:"H3", title:"Nationalism in Europe",
+            topics:["Meaning of nationalism","Unification of Germany — Bismarck","Unification of Italy — Garibaldi and Cavour","Decline of Ottoman and Habsburg Empires","Romantic movement and nationalism"],
+            ytQuery:"class 9 nationalism Europe unification Germany Italy Bismarck Garibaldi telangana",
+            notes:"Nationalism: people with shared language, culture and history form a nation-state. German Unification: led by Prussia under Chancellor Bismarck ('blood and iron' policy) — unified 39 states into German Empire by 1871. Italian Unification (Risorgimento): Cavour (diplomat), Garibaldi (military — Red Shirts), Mazzini (idealist) — unified Italy by 1871. Habsburg and Ottoman Empires declined as nationalist movements demanded independence. Romantic movement celebrated folk culture, local language and history — fuelled nationalist sentiment."
+          },
+          { id:"H4", title:"Rise of Nationalism in India",
+            topics:["Early nationalist movements — Moderates and Extremists","Role of Indian National Congress (INC — 1885)","Partition of Bengal (1905) and Swadeshi Movement","Non-Cooperation Movement","Key leaders — Tilak, Gokhale, Gandhi"],
+            ytQuery:"class 9 nationalism India INC partition Bengal swadeshi non-cooperation movement telangana",
+            notes:"Indian nationalism grew in response to British exploitation. INC founded 1885 — initially Moderates (Gokhale — petitions, Dadabhai Naoroji). Extremists (Tilak — 'Swaraj is my birthright') demanded complete independence. Lord Curzon's Partition of Bengal (1905) sparked massive protests — Swadeshi (use Indian goods), boycott of British goods. Gandhi emerged with mass movements: Non-Cooperation (1920–22), Civil Disobedience (1930 — Salt March), Quit India (1942). Key events: Jallianwala Bagh massacre (1919), Rowlatt Act, Montagu-Chelmsford Reforms."
+          },
+          { id:"H5", title:"India and the Contemporary World",
+            topics:["British economic policies","Drain of wealth (Dadabhai Naoroji)","De-industrialisation of India","Impact on agriculture — indigo, opium cultivation","Role of railways and telegraph"],
+            ytQuery:"class 9 British economic policies drain of wealth deindustrialisation India telangana",
+            notes:"British policies transformed India's economy negatively. Drain of Wealth: India's resources, raw materials and wealth flowed to Britain — Dadabhai Naoroji estimated the annual drain. De-industrialisation: British machine-made goods destroyed Indian handicrafts (especially textiles — Dhaka muslin declined). Agriculture: peasants forced to grow indigo and opium (export crops) instead of food — led to famines. Railways: built primarily to extract resources to ports, not for Indian development. However, railways inadvertently unified India and spread nationalist ideas."
+          },
+          { id:"H6", title:"Forest, Society and Colonialism",
+            topics:["Traditional forest use by tribals and peasants","British Forest Acts — Indian Forest Act 1878","Scientific forestry vs community needs","Forest-based resistance movements (Birsa Munda)","Impact on tribal communities"],
+            ytQuery:"class 9 forest colonialism Indian Forest Act tribals Birsa Munda telangana",
+            notes:"Before colonialism, forests were used by tribal communities for food, fuel, and livelihood. British introduced 'scientific forestry' to exploit timber commercially. Indian Forest Act (1878): Reserved Forests (no community rights), Protected Forests, Village Forests. Villagers lost rights to graze, collect firewood, or practice shifting cultivation. Resulted in rebellions: Birsa Munda's Ulgulan (Great Tumult) in Jharkhand (1899–1900). Forest communities were pushed to the margins. Today, Forest Rights Act (2006) recognises tribal land rights."
+          },
+          { id:"H7", title:"Pastoralists in the Modern World",
+            topics:["Nomadic pastoral communities in India (Gujjars, Raikas, Dhangars)","Pastoral communities in Africa (Maasai)","Impact of colonial land laws on pastoralists","Restrictions on movement and grazing","Adaptation strategies of modern pastoralists"],
+            ytQuery:"class 9 pastoralists modern world nomads Maasai India colonial policies telangana",
+            notes:"Pastoralists are communities that move seasonally with their livestock for pasture. India: Gujjars (Himalayas to plains), Raikas (Rajasthan), Dhangars (Maharashtra). Africa: Maasai of Kenya/Tanzania. Colonial policies disrupted pastoral life: Waste Land Acts (uncultivated land taken), Forest Acts (restricted movement), Criminal Tribes Act (nomads declared criminals). Pastoralists adapted by reducing herd sizes, sending children to school, taking up alternative work. Many now permanently settled due to shrinking grazing lands."
+          },
+        ]
+      },
+      {
+        title:"Geography",
+        chapters:[
+          { id:"G1", title:"India — Size, Location and Physical Features",
+            topics:["Location — 8°N to 37°N, 68°E to 97°E","Area — 3.28 million km²","Himalayan Mountains — ranges, passes, rivers","Northern Plains — formation, significance","Peninsular Plateau — Deccan, Western and Eastern Ghats","Coastal plains and Islands"],
+            ytQuery:"class 9 India size location physical features Himalayas plains plateau telangana geography",
+            notes:"India lies between 8°4'N to 37°6'N and 68°7'E to 97°25'E. Area: 3.28 million km² (7th largest). Himalayas: 3 parallel ranges — Greater Himalayas (Himadri), Lesser Himalayas (Himachal), Outer Himalayas (Shiwaliks). Northern Plains: formed by alluvial deposits of Indus, Ganga, Brahmaputra — most fertile land. Peninsular Plateau: ancient landmass (Gondwana), average height 600–900m, Western Ghats (higher, steep) vs Eastern Ghats (lower, discontinuous). Thar Desert in NW. Coastal plains: Konkan (West), Coromandel (East). Islands: Andaman & Nicobar (Bay of Bengal), Lakshadweep (Arabian Sea)."
+          },
+          { id:"G2", title:"Drainage Systems of India",
+            topics:["Himalayan rivers — Indus, Ganga, Brahmaputra (perennial)","Peninsular rivers — Mahanadi, Godavari, Krishna, Cauvery (seasonal)","River basins and watersheds","Difference between Himalayan and Peninsular rivers","Major lakes of India"],
+            ytQuery:"class 9 drainage rivers India Himalayan peninsular Ganga Godavari Krishna telangana",
+            notes:"India has two river systems. Himalayan Rivers: originate in glaciers — perennial (flow throughout year), young rivers — Indus, Ganga (longest Indian river — 2525 km), Brahmaputra. They form large floodplains and deltas. Peninsular Rivers: originate in Western Ghats — seasonal (dependent on monsoon), older and shallower — Mahanadi, Godavari (largest in South — 'Ganga of South'), Krishna, Cauvery. East-flowing rivers form deltas; West-flowing (Narmada, Tapi) form estuaries. Lakes: Dal (J&K), Vembanad (Kerala), Chilika (Odisha — largest brackish water lake)."
+          },
+          { id:"G3", title:"Climate of India",
+            topics:["Factors affecting climate — latitude, altitude, distance from sea","Monsoon mechanism — ITCZ, jet streams","Four seasons in India","South-West and North-East monsoons","Regional climate variations","Variability of rainfall"],
+            ytQuery:"class 9 climate India monsoon mechanism seasons rainfall distribution telangana",
+            notes:"India has a monsoon-type climate. Influencing factors: Himalayas (block cold Siberian winds), Thar Desert (creates low pressure), Distance from sea (continental effect), Altitude. Mechanism: ITCZ shifts north in summer creating low pressure over NW India — moist SW monsoon winds blow in (June–September, 75% of annual rainfall). Retreating monsoon (Oct–Dec) — NE monsoon brings rain to Tamil Nadu. 4 seasons: Winter (Dec–Feb), Hot Weather (Mar–May), Southwest Monsoon (Jun–Sep), Retreating Monsoon (Oct–Nov). Mawsynram (Meghalaya) — wettest place on earth."
+          },
+          { id:"G4", title:"Natural Vegetation and Wildlife",
+            topics:["Tropical Rainforests","Tropical Deciduous (Monsoon) Forests","Tropical Thorn Forests","Mangrove Forests","Mountain forests","Biosphere Reserves and National Parks","Endangered species"],
+            ytQuery:"class 9 natural vegetation wildlife forest types biosphere reserves India telangana",
+            notes:"India has 5 types of natural vegetation. Tropical Rainforests: heavy rainfall areas (NE India, Western Ghats) — dense, evergreen, ebony, rosewood. Tropical Deciduous (most common): moderate rainfall — teak, sal, sandalwood (divided into moist and dry deciduous). Tropical Thorn: arid regions (Rajasthan) — khair, babul, cacti. Mangroves: coastal areas, deltas — Sundarbans (largest mangrove — Bengal). Mountain forests: altitude-based — temperate (oak, chestnut), coniferous (pine, deodar). Wildlife: Project Tiger, Project Elephant. Biosphere reserves protect entire ecosystems."
+          },
+          { id:"G5", title:"Agriculture in India",
+            topics:["Types of farming — subsistence and commercial","Kharif and Rabi crops","Major crops — rice, wheat, cotton, jute, tea","Green Revolution — HYV seeds, irrigation, fertilisers","Challenges — small landholdings, debt, water scarcity"],
+            ytQuery:"class 9 agriculture India kharif rabi crops green revolution challenges telangana",
+            notes:"Agriculture employs 54% of India's workforce. Subsistence farming: for family use. Commercial: for market. Kharif crops: sown in summer (June), harvested in autumn (Sep–Oct) — rice, cotton, jowar, bajra, sugarcane. Rabi crops: sown in winter (Oct), harvested in spring (Mar–Apr) — wheat, mustard, peas, gram. Zaid crops: short season between Kharif and Rabi (watermelon, cucumber). Green Revolution (1960s): HYV seeds (Borlaug), increased irrigation, chemical fertilisers — doubled wheat and rice production in Punjab, Haryana. Challenges: fragmented landholdings, farmer debt, soil degradation, water scarcity, climate change."
+          },
+          { id:"G6", title:"Population",
+            topics:["Population distribution and density","Factors affecting distribution","Population growth rate — birth rate, death rate, migration","Age-sex composition","Literacy rate and work force","Population policy"],
+            ytQuery:"class 9 population India distribution density growth migration literacy telangana",
+            notes:"India's population (2011 census): 1.21 billion — 2nd largest. Density: 382 persons/km². Uneven distribution: dense in UP, Bihar, West Bengal (fertile plains); sparse in Rajasthan, Arunachal Pradesh (harsh terrain). Growth: Birth rate – Death rate + Migration. India's population growth slowed (rate decreased from 2.5% to 1.6%). Demographic transition: high birth+death → high birth+low death → low birth+low death. Age structure: young population (dividend or burden?). Literacy rate (2011): 74.04% (male 82%, female 65.46%). Population policy: National Population Policy 2000 aimed at stabilising population."
+          },
+        ]
+      },
+      {
+        title:"Political Science (Civics)",
+        chapters:[
+          { id:"C1", title:"Democracy — What and Why?",
+            topics:["Definition and features of democracy","Types of democracy — direct and representative","Why democracy over other forms of government?","Arguments for and against democracy","Examples of democratic and non-democratic countries"],
+            ytQuery:"class 9 democracy definition features representative democracy political science telangana",
+            notes:"Democracy: government elected by the people, for the people and of the people (Lincoln). Features: Universal Adult Franchise, Free and Fair Elections, Rule of Law, Protection of Fundamental Rights, Independent Judiciary, Multi-party system. Direct democracy (ancient Athens): people vote on every law. Representative democracy (modern): elect representatives to govern. Arguments for democracy: respects human dignity, better decisions through debate, peaceful change of government. Against: slow decisions, majority can oppress minority. Non-democratic: military rule (Myanmar), monarchy (Saudi Arabia), single-party rule (China)."
+          },
+          { id:"C2", title:"Constitutional Design",
+            topics:["Why do we need a constitution?","Making of Indian Constitution — Constituent Assembly","Key figures — Dr. B.R. Ambedkar, Jawaharlal Nehru","Preamble — WE THE PEOPLE, Sovereign Socialist Secular Democratic Republic","Fundamental Rights (Part III)","Directive Principles of State Policy"],
+            ytQuery:"class 9 constitutional design Constituent Assembly preamble fundamental rights DPSP telangana",
+            notes:"Constitution is the supreme law defining the structure, powers, and limitations of government and rights of citizens. Constituent Assembly (1946–49): 299 members, chaired by Dr. Rajendra Prasad, drafting committee headed by Dr. B.R. Ambedkar (chief architect). Adopted on Nov 26, 1949, came into force Jan 26, 1950. Preamble: India is Sovereign (independent), Socialist (equal distribution), Secular (no state religion), Democratic (elected government), Republic (elected head). Fundamental Rights (Part III): Right to Equality, Freedom, Against Exploitation, to Religion, Cultural/Educational, Constitutional Remedies (most important — 'heart of constitution'). DPSP: non-justiciable but guide state policy."
+          },
+          { id:"C3", title:"Electoral Politics",
+            topics:["Why elections are necessary","Election process in India","Election Commission of India (ECI)","Model Code of Conduct","Significance of universal adult franchise","Challenges to free and fair elections"],
+            ytQuery:"class 9 electoral politics election process India ECI Model Code of Conduct telangana",
+            notes:"Elections allow citizens to choose their representatives. Indian elections: world's largest democracy. Lok Sabha (every 5 years), State Assemblies. Election Commission of India: independent constitutional body — supervises, controls and conducts elections. Appointment: President appoints CEC. Model Code of Conduct: party in power cannot misuse government machinery during elections. Universal Adult Franchise: every citizen above 18 has the right to vote (regardless of caste, religion, gender). NOTA option introduced in 2013. Challenges: money power, muscle power, caste-based voting, fake news."
+          },
+          { id:"C4", title:"Working of Institutions",
+            topics:["Parliament — Lok Sabha and Rajya Sabha","Powers of Parliament","Prime Minister and Council of Ministers","President of India — role and powers","Supreme Court and High Courts — Judicial Review"],
+            ytQuery:"class 9 working institutions Parliament President Prime Minister Supreme Court India telangana",
+            notes:"Legislature (Parliament) makes laws: Lok Sabha (House of People — 543 elected + 2 nominated, max 5-year term), Rajya Sabha (Council of States — 245 members, permanent house). Money Bills originate only in Lok Sabha. Executive: President (constitutional head, elected indirectly, 5-year term), Prime Minister (real executive, leader of majority party). PM appoints Council of Ministers — responsible to Lok Sabha. Judiciary: Supreme Court (highest court — original, appellate, advisory jurisdiction), Judicial Review (can strike down laws that violate Constitution), High Courts in each state, District Courts. Independence of judiciary ensured through security of tenure."
+          },
+          { id:"C5", title:"Democratic Rights",
+            topics:["Fundamental Rights under Part III","Right to Equality (Art 14–18)","Right to Freedom (Art 19–22)","Right Against Exploitation (Art 23–24)","Right to Constitutional Remedies (Art 32) — Writs","National Human Rights Commission (NHRC)"],
+            ytQuery:"class 9 democratic rights fundamental rights Constitution India NHRC writs telangana",
+            notes:"Six Fundamental Rights: (1) Right to Equality (Art 14–18): equality before law, no discrimination, abolition of untouchability. (2) Right to Freedom (Art 19–22): speech, assembly, movement, profession — with reasonable restrictions. (3) Right Against Exploitation (Art 23–24): prohibits bonded labour and child labour (<14 years). (4) Right to Freedom of Religion (Art 25–28). (5) Cultural & Educational Rights (Art 29–30): minorities can preserve culture. (6) Right to Constitutional Remedies (Art 32): Dr. Ambedkar called it 'heart and soul of Constitution' — can approach SC directly. Writs: Habeas Corpus, Mandamus, Prohibition, Certiorari, Quo Warranto. NHRC: independent commission protecting human rights."
+          },
+        ]
+      },
+      {
+        title:"Economics",
+        chapters:[
+          { id:"E1", title:"The Story of Village Palampur",
+            topics:["Production activities in a village","Factors of production — land, labour, capital, human capital","Farming in Palampur — modern farming methods","Non-farm activities — small-scale manufacturing, trade, transport","Limitations of land and capital"],
+            ytQuery:"class 9 village Palampur production factors land labour capital economics telangana",
+            notes:"Palampur is a hypothetical village that illustrates economic activities. Main activity: farming (75% of families — but most are landless labourers). Factors of production: Land (fixed resource in Palampur), Labour (landless workers work for wages), Physical Capital (tools, machines, raw materials, money), Human Capital (education and skills). Modern farming: HYV seeds, chemical fertilisers, irrigation (electric tube wells). Non-farm: small manufacturers (jaggery, leather goods), shopkeepers, transport workers. Limitation: land area is fixed — cannot expand farming; educated youth preferred non-farm work."
+          },
+          { id:"E2", title:"People as Resource",
+            topics:["Human capital formation","Education and its role in development","Health and productivity","Unemployment — types (open, disguised)","Women and economic development","Economic activities — primary, secondary, tertiary"],
+            ytQuery:"class 9 people as resource human capital education health unemployment economics telangana",
+            notes:"People are not just consumers but also productive resources (human capital). Human capital formation: investment in education, health, on-the-job training, migration. Education: increases productivity, improves quality of life, reduces poverty. Health: healthy worker more productive. Unemployment: Open unemployment (no work available), Disguised unemployment (more workers than needed — common in Indian agriculture — 3 workers doing work of 2). Women's work: undervalued and unpaid household work not counted in GDP. Economic activities: Primary (agriculture, mining), Secondary (manufacturing), Tertiary (services — largest employer in India today)."
+          },
+          { id:"E3", title:"Poverty as a Challenge",
+            topics:["Poverty line — caloric method","Poverty in India — rural vs urban","Social groups vulnerable to poverty (SC, ST, female-headed households)","Causes of poverty","Government anti-poverty programmes — MGNREGA, PDS","Global poverty"],
+            ytQuery:"class 9 poverty India poverty line causes MGNREGA PDS government programmes telangana",
+            notes:"Poverty line in India: based on caloric requirement — Rural: 2400 kcal/day (₹816/month in 2011), Urban: 2100 kcal/day (₹1000/month). About 22% of Indians below poverty line (2011–12). Vulnerable groups: SC, ST, casual labourers, female-headed households, migrants. Causes: low agricultural productivity, lack of education and healthcare, population growth, unemployment, social inequality. Government initiatives: MGNREGA (100 days guaranteed wage employment in rural areas), PM Garib Kalyan Yojana, National Food Security Act. Global poverty: World Bank defines poverty as living on less than $2.15/day (2022)."
+          },
+          { id:"E4", title:"Food Security in India",
+            topics:["What is food security? — Availability, Access, Absorption","Buffer stock","Public Distribution System (PDS) — FCI, fair price shops","Food Security Act 2013","Green Revolution and food surplus","Challenges to food security"],
+            ytQuery:"class 9 food security India buffer stock PDS Food Security Act FCI telangana",
+            notes:"Food security means: (1) Availability (enough food produced), (2) Access (people can buy/obtain food), (3) Absorption (nutritious food with clean water and sanitation). Food insecure: landless labourers, small farmers, urban poor, disaster-affected. Buffer stock: surplus food grains procured by government through FCI (Food Corporation of India) for distribution during scarcity. PDS: Government provides subsidised food grains through fair price shops (ration shops) — wheat, rice, sugar, kerosene. National Food Security Act 2013: legal right to food — 75% rural and 50% urban population entitled to subsidised grains (5 kg/person/month). Challenge: storage losses, corruption in PDS, hunger despite surplus production."
+          },
+        ]
+      },
+    ]
+  },
+
+  English: {
+    icon:"📗", color:"#2D9CDB", light:"#E8F4FD",
+    exam:"Single Paper | 100 marks | 3 hrs",
+    sections:[
+      {
+        title:"Prose Lessons",
+        chapters:[
+          { id:"EN1", title:"The Snake and the Mirror — Ruskin Bond",
+            topics:["Plot summary — doctor's encounter with a cobra","Theme — humour and suspense, overcoming fear","Character — the vain young doctor","Literary devices — irony, first-person narration","Vocabulary — relevant words"],
+            ytQuery:"class 9 English Snake and Mirror Ruskin Bond explanation telangana",
+            notes:"A young doctor is alone at night when a cobra drops onto his shoulder. His vanity about his appearance ironically saves him — the snake is fascinated by the mirror! The story uses first-person narration, vivid description, and gentle humour. Themes: the unpredictability of life, the absurdity of human vanity, and the power of calm in crisis. Ruskin Bond's light narrative style — short sentences for tension. Key vocabulary: nimble, veranda, slithered, fascination."
+          },
+          { id:"EN2", title:"True Height — David Naster",
+            topics:["Theme — perseverance, self-belief, overcoming failure","Character — the high jumper Michael","Message — never give up despite obstacles","Inspirational narrative style","Personal reflection"],
+            ytQuery:"class 9 English True Height David Naster explanation perseverance telangana",
+            notes:"Michael, a high jumper who fails repeatedly, learns the life lesson that true height is measured not by how high you jump but by how many times you get up when you fall. The story is deeply motivational and relevant to students. Themes: resilience, self-belief, redefining success. The story teaches students that failure is not the opposite of success — it is part of it. Note the extended metaphor of physical height vs personal growth."
+          },
+          { id:"EN3", title:"Swami Is Expelled from School — R.K. Narayan",
+            topics:["Character — Swaminathan (Swami)","Setting — Malgudi (fictional South Indian town)","Theme — childhood, school fear, innocence","Humour in everyday situations","First-person child narrator"],
+            ytQuery:"class 9 English Swami expelled school RK Narayan Malgudi explanation telangana",
+            notes:"R.K. Narayan's beloved character Swaminathan faces school troubles in the fictional Malgudi. The story captures childhood anxiety, authority, and innocent mischief with gentle humour. Themes: school life, adult-child relationship, small-town India. Narayan's simple, conversational prose makes complex emotions accessible. The story is part of the 'Swami and Friends' series. Focus on: how Swami's perspective differs from adults, comic situations arising from misunderstanding."
+          },
+          { id:"EN4", title:"What Is Man Without the Beasts? — Chief Seattle",
+            topics:["Environmental theme — humans are part of nature, not superior","Chief Seattle's speech to the US government","Interconnectedness of all living things","Poetic prose — metaphors, rhetorical questions","Message of conservation"],
+            ytQuery:"class 9 English Chief Seattle speech environment nature conservation telangana",
+            notes:"Chief Seattle's speech (1854) is a powerful environmental plea. The Native American chief argues that humans cannot own the earth — we are part of nature. Every element (air, water, animals) is connected. Prophetically warns that if all animals disappear, humans will die of loneliness. Themes: environmental conservation, human greed, indigenous wisdom, interconnectedness. Literary features: extended metaphors (earth as mother), rhetorical questions, repetition for emphasis. Very relevant today given climate change."
+          },
+          { id:"EN5", title:"A Havoc of Flood",
+            topics:["Disaster narrative — flood experience","Themes — survival, community, loss","Descriptive writing — powerful imagery","Journalistic style","Emotional impact on affected communities"],
+            ytQuery:"class 9 English Havoc of Flood disaster narrative explanation telangana",
+            notes:"This prose describes the devastating impact of flooding — loss of life, property, and livelihood. Themes: natural disaster, human resilience, community solidarity, and government response. Literary techniques: vivid descriptive language, emotive vocabulary, contrast between before and after. The narrative puts a human face on statistics. Key for writing skills: how to describe disaster effectively using sensory details. Discuss: role of government, NGOs, and ordinary citizens during disasters."
+          },
+          { id:"EN6", title:"A Long Walk to Freedom — Nelson Mandela",
+            topics:["Extract from Mandela's autobiography","Theme — freedom, apartheid, sacrifice","Historical context — apartheid in South Africa","Mandela's journey from prisoner to president","Inspiration and perseverance"],
+            ytQuery:"class 9 English Long Walk Freedom Nelson Mandela apartheid explanation telangana",
+            notes:"Extract from Mandela's autobiography describing his inauguration as President of South Africa — the culmination of his long struggle against apartheid. Apartheid: the racist policy of racial segregation in South Africa. Mandela spent 27 years in prison but emerged without bitterness. Themes: freedom as both a right and a responsibility, the price of freedom, hope and dignity. Important quotes: 'I have walked that long road to freedom.' Connection to Indian freedom struggle — both fought for human dignity."
+          },
+          { id:"EN7", title:"A Trip to Space",
+            topics:["Science and technology theme","Human space exploration","Challenges of life in space","Future of space travel","Scientific vocabulary"],
+            ytQuery:"class 9 English Trip to Space science technology explanation telangana",
+            notes:"This informative prose explores human space travel — challenges, achievements, and the future. Topics: microgravity effects on the human body, importance of spacesuits, the ISS (International Space Station), ISRO's achievements (Chandrayaan, Mangalyaan). Themes: human curiosity, scientific progress, international cooperation in space. Build vocabulary: orbit, astronaut/cosmonaut/vyomanaut, trajectory, module, docking. Connect to current events: India's Gaganyaan mission."
+          },
+          { id:"EN8", title:"The Last Lesson — Alphonse Daudet",
+            topics:["Theme — language, identity, patriotism","Setting — French village under German occupation","Character — Franz (student) and M. Hamel (teacher)","Irony — Franz values French only when it is forbidden","Message about mother tongue and cultural identity"],
+            ytQuery:"class 9 English Last Lesson Alphonse Daudet explanation theme telangana",
+            notes:"Set during the Franco-Prussian War (1870–71) — France loses Alsace and Lorraine to Germany. German orders replace French with German in schools. M. Hamel gives his last French lesson. Franz, who hated French, suddenly realises its value. Themes: importance of mother tongue, language as cultural identity, patriotism, the loss of freedom. Irony: Franz values French only when it is taken away. Hamel's final act — writing 'Vive La France!' on the blackboard — symbolises resistance. Connect to India: English vs regional languages debate."
+          },
+        ]
+      },
+      {
+        title:"Poetry",
+        chapters:[
+          { id:"EP1", title:"The Road Not Taken — Robert Frost",
+            topics:["Theme — making choices and their consequences","Extended metaphor — road as life choices","Tone — reflective, nostalgic","Symbolism","Rhyme scheme — ABAAB"],
+            ytQuery:"class 9 English Road Not Taken Robert Frost explanation theme meaning telangana",
+            notes:"The speaker stands at a fork in a wood and must choose between two paths. He chooses the less-travelled path and imagines telling the story 'with a sigh' in the future. Theme: the significance of choices we make in life, and how we rationalise them later. The poem is often misread as about individuality — actually it's about the uncertainty of choices and the human tendency to wonder 'what if.' Rhyme scheme: ABAAB. Key line: 'Two roads diverged in a wood, and I — I took the one less travelled by.'"
+          },
+          { id:"EP2", title:"Wind — Subramania Bharati",
+            topics:["Theme — strength, resilience, overcoming adversity","Extended metaphor — wind as challenges of life","Tone — challenging, defiant","Free verse — no rhyme scheme","Message — be strong to face difficulties"],
+            ytQuery:"class 9 English Wind Subramania Bharati explanation theme Tamil poem telangana",
+            notes:"Translated from Tamil. The wind is personified as a powerful, destructive force that breaks weak things — doors, rafters, weak people. But the poet argues: be strong like the wind! Theme: only the strong survive — build strong bodies, minds and friendships. The wind doesn't bother those who are strong (it actually befriends them). Free verse: no fixed rhyme scheme. The poem was originally written in Tamil — Bharati was a Tamil nationalist poet. Connection: prepare yourself for life's challenges rather than fearing them."
+          },
+          { id:"EP3", title:"Rain on the Roof — Coates Kinney",
+            topics:["Theme — nostalgia, memory, comfort","Imagery — rain as trigger for memories","Tone — warm, melancholy, nostalgic","Rhyme scheme","Personification of rain"],
+            ytQuery:"class 9 English Rain on Roof Coates Kinney explanation nostalgia memory telangana",
+            notes:"The poet lies in bed listening to rain on the roof and is transported back to memories of his mother. The sound of rain triggers deeply personal, nostalgic recollections. Theme: the power of sensory experiences to revive memory; the comfort of home and mother's love. Tone: warm, melancholy, meditative. Rhyme scheme: regular — provides musical quality mimicking the rhythm of rain. Key literary devices: imagery (auditory — the patter of rain), personification, alliteration."
+          },
+          { id:"EP4", title:"A Legend of the Northland — Phoebe Cary",
+            topics:["Ballad form — ABCB rhyme scheme","Theme — generosity and consequences, greed punished","Story of Saint Peter and the selfish woman","Transformation as punishment","Moral lesson"],
+            ytQuery:"class 9 English Legend Northland Phoebe Cary ballad Saint Peter explanation telangana",
+            notes:"A ballad (narrative poem) from the Northland. Saint Peter, fasting, asks a little woman for a cake. She is selfish and gives him nothing. As punishment, she is transformed into a woodpecker (bird pecking for food in wood). Theme: selfishness and greed are punished; generosity is a virtue. Ballad features: ABCB rhyme scheme, regular rhythm, narrative structure, simple language. Moral: those who don't give willingly will spend their lives searching for bare necessities (like a woodpecker)."
+          },
+          { id:"EP5", title:"On Killing a Tree — Gieve Patel",
+            topics:["Theme — destruction of nature, environmental message","Ironic title — poem about how NOT easy it is to kill a tree","Imagery of tree's resilience","Free verse","The root as source of life"],
+            ytQuery:"class 9 English On Killing Tree Gieve Patel explanation theme environment telangana",
+            notes:"The poem describes in chilling detail the effort required to actually kill a tree — a simple jab won't do it; you must destroy the roots. Ironically, this gruesome description actually celebrates the tree's extraordinary resilience. Theme: trees are living organisms worthy of respect; destruction of nature is a violent act. The tree's root, 'the source, white and wet,' must be killed for the tree to die. Environmental message: we should appreciate trees' tenacity rather than destroy them. Free verse with enjambment."
+          },
+          { id:"EP6", title:"The Snake Trying — W.W.E. Ross",
+            topics:["Theme — beauty of nature, human aggression towards wildlife","A snake trying to escape, not attack","Plea for conservation","Free verse","Vivid visual imagery"],
+            ytQuery:"class 9 English Snake Trying WWE Ross explanation nature conservation telangana",
+            notes:"A green snake is chased by a man with a stick. The poet admires the snake's graceful escape — its beautiful sinuous form. Plea: let the harmless creature go into the water! Theme: humans' irrational fear and aggression towards all snakes (many are harmless), need for wildlife compassion and conservation. Free verse — the flowing lines mirror the snake's movement. Contrast: man's aggression vs snake's harmless grace. Connect to conservation: most snake bites occur when people try to kill snakes, not when left alone."
+          },
+          { id:"EP7", title:"A Slumber Did My Spirit Seal — William Wordsworth",
+            topics:["Lucy poem — grief after death of a loved one","Theme — mortality, nature, grief","Two stanzas — before and after death","Imagery of nature","No fears of death vs reality of death"],
+            ytQuery:"class 9 English Slumber Spirit Seal Wordsworth Lucy poem explanation telangana",
+            notes:"One of Wordsworth's 'Lucy poems.' Two stanzas: In the first, the speaker in a dream-like state had no fear of death for his beloved. In the second, she is dead — now part of nature (rocks, stones, trees), rolled along with Earth's motion. Theme: death makes humans part of impersonal nature; contrast between romantic illusion and the reality of mortality. Tone: eerily calm in grief — no tears, just a quiet statement of loss. Wordsworth believed nature was eternal, and in death we merge with it."
+          },
+        ]
+      },
+      {
+        title:"Grammar & Writing Skills",
+        chapters:[
+          { id:"EG1", title:"Grammar Topics",
+            topics:["Tenses (Simple, Continuous, Perfect, Perfect Continuous)","Active and Passive Voice","Direct and Indirect Speech","Modals (can, could, may, might, shall, should, will, would, must)","Articles (a, an, the)","Prepositions","Conjunctions","Question Tags","Subject-Verb Agreement","Transformation of Sentences"],
+            ytQuery:"class 9 English grammar tenses active passive direct indirect speech modals telangana",
+            notes:"Grammar is the backbone of English. Tenses: Learn 12 tenses — when to use each. Active voice: 'She ate the apple.' Passive: 'The apple was eaten by her.' Direct speech: 'He said, I am tired.' Indirect: 'He said that he was tired.' (Note tense change.) Modals: can (ability), may (permission), should (advice), must (obligation), would (polite request). Articles: 'a' (first mention, consonant), 'an' (vowel sound), 'the' (specific, unique). Question tags: 'She is coming, isn't she?' Subject-Verb Agreement: singular subject → singular verb."
+          },
+          { id:"EG2", title:"Writing Skills",
+            topics:["Formal Letter (complaint, request, application)","Informal Letter (to friend/family)","Paragraph Writing","Descriptive Writing","Summary Writing","Dialogue Writing","Notice Writing"],
+            ytQuery:"class 9 English writing skills formal informal letter notice dialogue summary telangana",
+            notes:"Formal Letter format: Sender's address, Date, Receiver's address, Subject, Salutation (Dear Sir/Madam), Body (3 paragraphs), Closing (Yours faithfully). Informal Letter: more relaxed, personal tone (Dear Priya, Yours lovingly). Notice: Heading (NOTICE), Name of organisation, Date, Title, Body (5 W's — who, what, where, when, why), Signature. Summary: 1/3 of original length, own words, no personal opinion, present tense. Paragraph writing: Topic sentence → Supporting details → Concluding sentence. For exams: practise each format at least 5 times."
+          },
+        ]
+      },
+    ]
+  },
+
+  Hindi: {
+    icon:"📕", color:"#E53E3E", light:"#FFF5F5",
+    exam:"Single Paper | 100 marks | 3 hrs",
+    sections:[
+      {
+        title:"Gadya (Prose Lessons)",
+        chapters:[
+          { id:"HN1", title:"Do Bailon Ki Katha — Premchand",
+            topics:["कहानी का सारांश — हीरा और मोती के माध्यम से स्वतंत्रता का संदेश","विषय — स्वतंत्रता, मित्रता, अत्याचार का विरोध","प्रेमचंद की लेखन शैली","पशुओं के माध्यम से मानवीय भावनाओं का चित्रण"],
+            ytQuery:"class 9 Hindi Do Bailon Ki Katha Premchand explanation सारांश telangana",
+            notes:"प्रेमचंद की यह कहानी हीरा और मोती नामक दो बैलों के माध्यम से स्वतंत्रता की भावना को दर्शाती है। मुख्य विषय: पशुओं में भी स्वाभिमान होता है; अत्याचार के विरुद्ध संघर्ष करना चाहिए; सच्ची मित्रता परिस्थितियों में काम आती है। गया (कंजूस मालिक) के घर से भागना, गांधी जी के आंदोलन का प्रतीक माना जाता है। शैली: सरल हिंदी, ग्रामीण परिवेश, व्यंग्य और भावुकता का मिश्रण।"
+          },
+          { id:"HN2", title:"Lhasa Ki Or — Rahul Sankrityayan",
+            topics:["यात्रा वृत्तांत — तिब्बत की यात्रा","विषय — साहस, जिज्ञासा, यात्रा का आनंद","तिब्बती समाज और संस्कृति का वर्णन","यात्रा में आई कठिनाइयाँ"],
+            ytQuery:"class 9 Hindi Lhasa Ki Or Rahul Sankrityayan travel yatra explanation telangana",
+            notes:"राहुल सांकृत्यायन का यात्रा वृत्तांत तिब्बत की रोमांचक यात्रा का विवरण देता है। लेखक ने भिखारी के वेश में यात्रा की (उस समय भारतीयों को तिब्बत जाने की अनुमति नहीं थी)। मुख्य विषय: साहसिक यात्रा की भावना, जिज्ञासा और ज्ञान की प्यास, विभिन्न संस्कृतियों को समझना। तिब्बती रीति-रिवाज, खानपान, मठों का वर्णन। शैली: वर्णनात्मक, रोचक, विवरणात्मक।"
+          },
+          { id:"HN3", title:"Saanwale Sapnon Ki Yaad — Jabir Hussain",
+            topics:["संस्मरण — जिम कॉर्बेट की याद","विषय — प्रकृति प्रेम, संरक्षण, श्रद्धांजलि","कॉर्बेट की शिकार-से-संरक्षण की यात्रा","भावपूर्ण लेखन शैली"],
+            ytQuery:"class 9 Hindi Saanwale Sapnon Ki Yaad Jim Corbett explanation telangana",
+            notes:"जिम कॉर्बेट (1875–1955) — प्रसिद्ध शिकारी जो बाद में वन्यजीव संरक्षक बन गए। लेखक ने उनकी मृत्यु पर श्रद्धांजलि स्वरूप यह संस्मरण लिखा। मुख्य विषय: प्रकृति के प्रति प्रेम; मनुष्य और वन्यजीव का सह-अस्तित्व; जीवन में परिवर्तन और आत्म-साक्षात्कार। कॉर्बेट नेशनल पार्क उन्हीं के नाम पर है। शैली: भावपूर्ण, संस्मरणात्मक, काव्यात्मक।"
+          },
+          { id:"HN4", title:"Nana Sahab Ki Putri Devi Maina — Chapala Devi",
+            topics:["1857 की क्रांति की पृष्ठभूमि","मैना का बलिदान — देशभक्ति का प्रतीक","अंग्रेजों की क्रूरता का चित्रण","भाषाई विशेषताएं"],
+            ytQuery:"class 9 Hindi Nana Sahab Putri Maina 1857 explanation patriotism telangana",
+            notes:"1857 की क्रांति की पृष्ठभूमि पर आधारित — नाना साहब की बेटी मैना का बिठूर का महल अंग्रेज जलाना चाहते थे। मैना ने जनरल आउट्रम से विनती की पर बाद में उसे पकड़ कर फाँसी दे दी गई। मुख्य विषय: देशभक्ति, बलिदान, अंग्रेजों की क्रूरता। एक 12-वर्षीय लड़की का साहस और देशप्रेम। ऐतिहासिक महत्व: 1857 की क्रांति में महिलाओं की भूमिका।"
+          },
+          { id:"HN5", title:"Premchand Ke Phate Joote — Harishankar Parsai",
+            topics:["व्यंग्य निबंध — प्रेमचंद के फटे जूते का प्रतीक","विषय — आदर्शवाद vs भौतिकवाद","व्यंग्य शैली का परिचय","प्रेमचंद के जीवन मूल्यों की प्रासंगिकता"],
+            ytQuery:"class 9 Hindi Premchand Ke Phate Joote Harishankar Parsai vyangya explanation telangana",
+            notes:"हरिशंकर परसाई व्यंग्यकार हैं। प्रेमचंद की एक प्रसिद्ध तस्वीर में उनके जूते फटे हैं — लेखक इसी पर व्यंग्य करते हुए कहते हैं कि उन्होंने जमाने के साथ समझौता नहीं किया। मुख्य विषय: आदर्शवाद की कीमत; सच्चे लेखक को भौतिक सुख नहीं मिलता; समझौता करने वाले लोगों पर व्यंग्य। व्यंग्य शैली: हास्य के माध्यम से गहरी बात कहना।"
+          },
+          { id:"HN6", title:"Mere Bachpan Ke Din — Mahadevi Verma",
+            topics:["आत्मकथात्मक संस्मरण — बचपन की यादें","क्रांतिकारी परिवार का प्रभाव","महादेवी वर्मा की शिक्षा और लेखन प्रेरणा","स्त्री-शिक्षा का महत्व"],
+            ytQuery:"class 9 Hindi Mere Bachpan Ke Din Mahadevi Verma autobiography explanation telangana",
+            notes:"महादेवी वर्मा (1907–1987) — हिंदी की महान कवयित्री, छायावाद की स्तंभ। यह संस्मरण उनके बचपन की यादों पर आधारित है। परिवार में स्वतंत्रता-प्रेम; दादाजी ने फ़ारसी सिखाई; माँ धार्मिक थीं। 9 वर्ष की आयु में विवाह लेकिन अपनी शिक्षा जारी रखी। मुख्य विषय: स्त्री-शिक्षा, पारिवारिक संस्कार, आत्म-निर्भरता।"
+          },
+          { id:"HN7", title:"Ek Kutta Aur Ek Maina — Hazari Prasad Dwivedi",
+            topics:["विषय — पशु-पक्षियों के प्रति संवेदनशीलता","रवींद्रनाथ टैगोर और उनके पालतू जानवर","दार्शनिक निबंध शैली","जीव-प्रेम और मानवता"],
+            ytQuery:"class 9 Hindi Ek Kutta Ek Maina Hazari Prasad Dwivedi Tagore explanation telangana",
+            notes:"हजारी प्रसाद द्विवेदी ने रवींद्रनाथ टैगोर के एक कुत्ते और एक मैना पक्षी के साथ संबंध का वर्णन किया है। मुख्य विषय: पशु-पक्षियों में भी भावनाएँ होती हैं; टैगोर का सभी जीवों के प्रति प्रेम; मानव और प्रकृति का संबंध। दार्शनिक प्रश्न: क्या हमारे आसपास जो जीव हैं वे भी कुछ समझते हैं? शैली: ललित निबंध — भावपूर्ण और चिंतनशील।"
+          },
+        ]
+      },
+      {
+        title:"Kavya (Poetry)",
+        chapters:[
+          { id:"HV1", title:"Kabir Ke Dohe — Kabir Das",
+            topics:["दोहा छंद का परिचय","विषय — ईश्वर-भक्ति, मानवता, सामाजिक कुरीतियों का विरोध","कबीर के दर्शन — निर्गुण भक्ति","प्रमुख दोहों का अर्थ"],
+            ytQuery:"class 9 Hindi Kabir Dohe meaning explanation nirgun bhakti telangana",
+            notes:"कबीरदास (15वीं सदी) — निर्गुण भक्ति शाखा के महाकवि। दोहा: 2 पंक्तियों का छंद। प्रमुख विषय: ईश्वर सब में है, मंदिर-मस्जिद में नहीं; गुरु का महत्व ('गुरु गोविंद दोउ खड़े...'); जात-पात का विरोध; मृत्यु की सच्चाई। प्रसिद्ध दोहे याद करें: 'बुरा जो देखन मैं चला...', 'दुख में सुमिरन सब करे...' आदि।"
+          },
+          { id:"HV2", title:"Lal Ded — Vakh",
+            topics:["कश्मीरी मध्यकालीन कवयित्री","विषय — आत्म-चिंतन, ईश्वर-प्राप्ति, भौतिकवाद की निरर्थकता","रहस्यवादी कविता","अनुवाद की चुनौतियाँ"],
+            ytQuery:"class 9 Hindi Lal Ded Vakh Kashmiri mystic poetry explanation telangana",
+            notes:"लल देद (14वीं सदी) — कश्मीर की रहस्यवादी कवयित्री। 'वाख' उनकी काव्य-विधा का नाम है। मुख्य विषय: आत्मा की खोज; ईश्वर को बाहर नहीं, अपने भीतर खोजो; भौतिक जीवन नश्वर है; साधना और ध्यान से मुक्ति। महिला संत-कवयित्रियों की परंपरा — मीराबाई, अक्का महादेवी आदि से तुलना करें।"
+          },
+          { id:"HV3", title:"Raskhan — Savaiye",
+            topics:["भक्ति काव्य — कृष्ण भक्ति","सवैया छंद का परिचय","रसखान की कृष्ण-भक्ति की तीव्रता","अगले जन्म में कृष्ण के पास रहने की इच्छा"],
+            ytQuery:"class 9 Hindi Raskhan Savaiye Krishna bhakti explanation chhanda telangana",
+            notes:"रसखान (16वीं–17वीं सदी) — मुस्लिम होते हुए भी कृष्ण के परम भक्त। सवैया छंद में लिखी कविताएँ। प्रमुख भाव: अगले जन्म में कृष्ण के पास ही रहना चाहते हैं — चाहे पत्थर बनें (गोवर्धन के), पशु बनें (ब्रज के), या पक्षी बनें (यमुना के किनारे के)। यह सगुण भक्ति का उत्कृष्ट उदाहरण है। भाषा: ब्रजभाषा।"
+          },
+          { id:"HV4", title:"Makhanlal Chaturvedi — Pushp Ki Abhilasha",
+            topics:["देशभक्ति कविता","फूल की इच्छा — वीरों के चरणों में चढ़ना","विषय — बलिदान, देशप्रेम, क्रांतिकारी भावना","प्रतीकात्मकता — फूल = नवयुवक"],
+            ytQuery:"class 9 Hindi Pushp Ki Abhilasha Makhanlal Chaturvedi desh bhakti explanation telangana",
+            notes:"माखनलाल चतुर्वेदी की अमर देशभक्ति कविता। फूल को देव-पूजा, प्रिया के बालों, राजाओं के हार में चढ़ने की इच्छा नहीं — बस वह चाहता है कि देश के लिए बलिदान होने वाले वीरों के मार्ग में कुचला जाए। फूल देश के युवाओं का प्रतीक है जो देश के लिए अपनी जान देने को तैयार हैं। स्वतंत्रता संग्राम के समय लिखी — क्रांतिकारियों को प्रेरणा दी।"
+          },
+          { id:"HV5", title:"Sumitranandan Pant — Gram Shri",
+            topics:["प्रकृति कविता — ग्रामीण भारत का चित्रण","शरद ऋतु का वर्णन","छायावादी काव्य शैली","प्रकृति के विभिन्न चित्र — फसलें, नदियाँ, पक्षी"],
+            ytQuery:"class 9 Hindi Gram Shri Sumitranandan Pant nature poem Chhayavad explanation telangana",
+            notes:"सुमित्रानंदन पंत (1900–1977) — छायावाद के प्रमुख कवि। ग्राम श्री में शरद ऋतु में एक सुंदर गाँव का चित्रण। हरे-भरे खेत, लहलहाती फसलें, तालाब, झरने, पक्षियों का कलरव — सब मिलकर प्रकृति की अनुपम छटा प्रस्तुत करते हैं। मुख्य विषय: ग्रामीण भारत की सुंदरता, प्रकृति और मनुष्य का संबंध। शैली: सुकोमल, चित्रात्मक, संगीतात्मक।"
+          },
+        ]
+      },
+      {
+        title:"व्याकरण (Grammar) & Writing",
+        chapters:[
+          { id:"HG1", title:"हिंदी व्याकरण",
+            topics:["संज्ञा (Nouns) — 5 भेद","सर्वनाम (Pronouns) — 6 भेद","विशेषण (Adjectives) — 4 भेद","क्रिया (Verbs) — सकर्मक, अकर्मक","काल (Tense) — भूत, वर्तमान, भविष्य","वचन (Number) — एकवचन, बहुवचन","लिंग (Gender)","संधि और समास","मुहावरे और लोकोक्तियाँ"],
+            ytQuery:"class 9 Hindi vyakaran sangya sarvanam visheshan kriya kaal sandhi samas telangana",
+            notes:"संज्ञा: व्यक्तिवाचक (Ram), जातिवाचक (लड़का), भाववाचक (सुंदरता), समूहवाचक (झुंड), द्रव्यवाचक (पानी)। सर्वनाम: पुरुषवाचक, निजवाचक, निश्चयवाचक, अनिश्चयवाचक, संबंधवाचक, प्रश्नवाचक। विशेषण: गुणवाचक, संख्यावाचक, परिमाणवाचक, सार्वनामिक। क्रिया: सकर्मक (object लेती है), अकर्मक (नहीं लेती)। संधि: दो शब्दों की ध्वनियों का मेल — स्वर संधि, व्यंजन संधि, विसर्ग संधि। समास: शब्दों का संक्षेप। मुहावरे: सीधे अर्थ से भिन्न। परीक्षा में महत्वपूर्ण।"
+          },
+          { id:"HG2", title:"लेखन कौशल",
+            topics:["पत्र लेखन — औपचारिक और अनौपचारिक","निबंध लेखन — विभिन्न प्रकार","अनुच्छेद लेखन","संवाद लेखन","सारांश लेखन","विज्ञापन लेखन"],
+            ytQuery:"class 9 Hindi patra lekhan nibandh anuched samvad saranas lekhan telangana",
+            notes:"पत्र लेखन: औपचारिक (प्रधानाचार्य, सरकारी) — पता, दिनांक, विषय, संबोधन (महोदय/महोदया), मुख्य भाग, समापन (भवदीय), हस्ताक्षर। अनौपचारिक (मित्र, परिवार) — अधिक स्वाभाविक भाषा। निबंध: परिचय → मुख्य भाग → उपसंहार। अनुच्छेद: एक ही विषय पर 8–10 वाक्य। सारांश: मूल का ⅓ भाग, मुख्य बातें, अपने शब्दों में। परीक्षा में पत्र और निबंध के लिए 10-10 अंक — अच्छे अंक पाने का अवसर।"
+          },
+        ]
+      },
+    ]
+  },
+
+  Telugu: {
+    icon:"📜", color:"#D69E2E", light:"#FFFFF0",
+    exam:"Single Paper | 100 marks | 3 hrs",
+    sections:[
+      {
+        title:"Gadyam (Prose Lessons)",
+        chapters:[
+          { id:"TL1", title:"Matrubhumi (మాతృభూమి)",
+            topics:["మాతృభూమి పట్ల ప్రేమ మరియు విధి","దేశభక్తి భావాలు","గద్య శైలి మరియు భాషా లక్షణాలు","ముఖ్య పదాలు మరియు అర్థాలు"],
+            ytQuery:"class 9 Telugu Matrubhumi lesson explanation 9th class Telangana state board",
+            notes:"మాతృభూమి పాఠం మన దేశం పట్ల ప్రేమను, దేశ సేవ యొక్క విధిని బోధిస్తుంది. ముఖ్య విషయాలు: జాతీయ భావాలు, దేశభక్తి, స్వయంసమృద్ధి. భాషా విశేషాలు: సంస్కృత పదాల వినియోగం, గంభీరమైన వచన శైలి. పరీక్షకు: ముఖ్య వాక్యాలు, పాఠ్య పాఠం నుండి ప్రశ్నలు, పదాల అర్థాలు."
+          },
+          { id:"TL2", title:"Vemana Satakam (వేమన శతకం)",
+            topics:["వేమన పరిచయం — 17వ శతాబ్దం","ఆటవెలది పద్యాలు","సామాజిక విమర్శ మరియు నీతి","ముఖ్య పద్యాల అర్థ వివరణ","వేమన తత్వశాస్త్రం"],
+            ytQuery:"class 9 Telugu Vemana Satakam padyam meaning explanation Telangana",
+            notes:"వేమన (17వ శతాబ్దం) — ఆంధ్ర తత్వవేత్త, కవి. ఆటవెలది పద్యాల్లో సమాజంలోని లోపాలను, మూఢనమ్మకాలను విమర్శించారు. ప్రసిద్ధ పద్యాలు: 'తల్లిదండ్రులు...', 'అల్పుడెప్పుడు...' మొదలైనవి. ముఖ్య విషయాలు: సత్యం, నీతి, జ్ఞానం, విద్యావిలువలు. పరీక్షకు: పద్యాల అర్థాలు, ప్రతిపద్యార్థం, వేమన జీవిత వివరాలు."
+          },
+          { id:"TL3", title:"Palle Seema (పల్లె సీమ)",
+            topics:["గ్రామీణ జీవన చిత్రణ","ప్రకృతి వర్ణన — పొలాలు, నదులు, పక్షులు","గ్రామ సంస్కృతి మరియు సంప్రదాయాలు","నగర జీవనంతో పోలిక"],
+            ytQuery:"class 9 Telugu Palle Seema village life lesson explanation Telangana board",
+            notes:"పల్లె సీమ పాఠం గ్రామీణ తెలంగాణ జీవనాన్ని అందంగా చిత్రిస్తుంది. సేద్యం, పొలాలు, పశువులు, జానపద సంగీతం, సామూహిక జీవనం — ఇవన్నీ గ్రామ జీవనంలో ఉండే విలువలు. ముఖ్య విషయాలు: ప్రకృతి ప్రేమ, గ్రామ సేవ, సాంప్రదాయిక విలువలు."
+          },
+          { id:"TL4", title:"Neellu – Nijam (నీళ్ళు – నిజం)",
+            topics:["నీటి ప్రాముఖ్యత — జీవనాధారం","నీటి కొరత సమస్య","పర్యావరణ సందేశం","నీటి సంరక్షణ అవసరం"],
+            ytQuery:"class 9 Telugu Neellu Nijam water conservation lesson explanation Telangana",
+            notes:"నీళ్ళు – నిజం పాఠం నీటి ప్రాముఖ్యతను, కొరతను వివరిస్తుంది. ముఖ్య సందేశం: నీరు జీవనాధారం; వ్యర్థం చేయకూడదు; రాబోయే తరాలకు కాపాడాలి. వాతావరణ మార్పుల వల్ల నీటి సంక్షోభం; వ్యవసాయంలో నీటి వినియోగం; భూగర్భ జలాల తగ్గుదల. పర్యావరణ అంశాలకు అనుసంధానం."
+          },
+          { id:"TL5", title:"Paryavaranam (పర్యావరణం)",
+            topics:["పర్యావరణ కాలుష్యం","జీవులు మరియు వాతావరణం","పర్యావరణ సంరక్షణ","మానవ కార్యకలాపాల ప్రభావం"],
+            ytQuery:"class 9 Telugu Paryavaranam environment lesson explanation Telangana board",
+            notes:"పర్యావరణం పాఠం మానవ చర్యల వల్ల పర్యావరణానికి కలిగే హానిని వివరిస్తుంది. వాయు కాలుష్యం, జల కాలుష్యం, భూ కాలుష్యం — కారణాలు మరియు పరిష్కారాలు. అడవుల నరికివేత, పారిశ్రామిక వ్యర్థాలు, ప్లాస్టిక్ వాడకం. పర్యావరణ చట్టాలు, ప్రభుత్వ చొరవలు."
+          },
+        ]
+      },
+      {
+        title:"Padyam (Poetry)",
+        chapters:[
+          { id:"TP1", title:"Bharata Varnana (భారత వర్ణన)",
+            topics:["భారతదేశ వైభవ వర్ణన","కావ్య శైలి — కందపద్యాలు లేదా సీస పద్యాలు","దేశభక్తి భావాలు","ప్రకృతి వర్ణన"],
+            ytQuery:"class 9 Telugu Bharata Varnana padyam meaning explanation patriotic poem Telangana",
+            notes:"భారత వర్ణన పద్యాలు భారతదేశ అందాన్ని, వైభవాన్ని వర్ణిస్తాయి. హిమాలయాలు, నదులు, పవిత్ర స్థలాలు, వైవిధ్యమైన సంస్కృతి — ఇవన్నీ కలిసి భారతదేశాన్ని అద్భుతంగా చేస్తాయి. పరీక్షకు: పద్యార్థాలు, ప్రతిపదార్థాలు, భావాలు."
+          },
+          { id:"TP2", title:"Potana Bhagavatam (పోతన భాగవతం)",
+            topics:["పోతన పరిచయం — 15వ శతాబ్దం","భక్తి కావ్యం","ప్రసిద్ధ ఘట్టాలు — గజేంద్ర మోక్షం","తెలుగు సాహిత్యంలో స్థానం"],
+            ytQuery:"class 9 Telugu Potana Bhagavatam padyam explanation bhakti kavyam Telangana",
+            notes:"బమ్మెర పోతన (15వ శతాబ్దం) — ఆంధ్ర మహాభాగవతం రచించిన మహాకవి. 'ఇచ్చగించి పలుకు' — స్వతంత్ర రచన. గజేంద్ర మోక్షం, ప్రహ్లాద చరిత్ర ప్రసిద్ధ ఘట్టాలు. నిర్వచన శైలి, భక్తి రసం ప్రధానం. పోతన ఏ రాజునకూ అంకితమివ్వలేదు — 'ఇచ్చగించి' రాశారు భగవంతుడికే."
+          },
+          { id:"TP3", title:"Sumati Satakam (సుమతీ శతకం)",
+            topics:["నీతి శతకం","కందపద్యాలు","సామాజిక విలువలు మరియు నీతి","ముఖ్య పద్యాల అర్థాలు"],
+            ytQuery:"class 9 Telugu Sumati Satakam niti padyam meaning explanation Telangana",
+            notes:"సుమతీ శతకం — బద్దెన రచించిన నీతి శతకం. కందపద్యాలు. ముఖ్య విషయాలు: మంచి స్నేహం, పని చేయడం, దుర్వ్యసనాలు వదలడం, మాటలో జాగ్రత్త. ప్రసిద్ధ పద్యాలు: 'పరులకు హితమును...' మొదలైనవి. పరీక్షకు: పద్యాల ప్రతిపదార్థాలు, భావాలు, సుమతీ శతకకారుని పరిచయం."
+          },
+        ]
+      },
+      {
+        title:"వ్యాకరణం (Grammar) & Writing",
+        chapters:[
+          { id:"TG1", title:"తెలుగు వ్యాకరణం",
+            topics:["సంధులు — స్వర సంధులు, వ్యంజన సంధులు","సమాసాలు — తత్పురుష, బహువ్రీహి, ద్వంద్వ, కర్మధారయ","అలంకారాలు — ఉపమ, రూపకం, ఉత్ప్రేక్ష","క్రియలు — సకర్మక, అకర్మక","వాక్య నిర్మాణం","పర్యాయ పదాలు మరియు వ్యతిరేక పదాలు","ఛందస్సు — ఆటవెలది, కందం, ఉత్పలమాల"],
+            ytQuery:"class 9 Telugu vyakaranam sandhulu samasalu alankaralu cchandas Telangana",
+            notes:"సంధులు: రెండు పదాల కలయికలో ధ్వని మార్పు. స్వర సంధులు (అ+అ=ఆ మొ.), తత్సమ సంధులు, ఆదేశ సంధులు. సమాసాలు: రెండు పదాల సంక్షేపం. అలంకారాలు: ఉపమ (పోలిక), రూపకం (సమంగా చెప్పడం), ఉత్ప్రేక్ష (ఊహించి చెప్పడం). ఛందస్సు: ఆటవెలది (వేమన), కందం (పోతన), ఉత్పలమాల. పరీక్షలో వ్యాకరణ భాగానికి 25 మార్కులు."
+          },
+          { id:"TG2", title:"రచనా నైపుణ్యాలు",
+            topics:["వ్యాస రచన","లేఖ రచన — అధికారిక మరియు అనధికారిక","సారాంశ రచన","పాఠ్య ప్రశ్నలు — స్వల్ప మరియు దీర్ఘ సమాధాన","పద్య వ్యాఖ్య"],
+            ytQuery:"class 9 Telugu essay letter writing rachana naipunyalu Telangana",
+            notes:"వ్యాస రచన: పరిచయం → ముఖ్య విషయాలు → ముగింపు. అధికారిక లేఖ: పంపిన వారి చిరునామా, తేది, పొందిన వారి చిరునామా, విషయం, అభివాదన, విషయ వివరణ, ముగింపు. అనధికారిక: స్నేహితుడికి, కుటుంబానికి — సరళమైన భాష. సారాంశం: మూలంలో ⅓ పాళ్ళు, స్వంత మాటలలో, ముఖ్య అంశాలే. పద్య వ్యాఖ్య: ప్రతిపదార్థం + తాత్పర్యం + విశేషాంశాలు."
+          },
+        ]
+      },
+    ]
+  },
+};
+
+const MOCK_QUESTIONS = {
+  Mathematics:[
+    { q:"Which of the following is NOT a rational number?", opts:["3/4","0.333...","√5","−7"], ans:2 },
+    { q:"If p(x) = x² − 5x + 6 and p(2) = 0, then (x − 2) is a:", opts:["Factor of p(x)","Zero of p(x)","Remainder","Coefficient"], ans:0 },
+    { q:"The distance between points (1,2) and (4,6) is:", opts:["5 units","7 units","3 units","6 units"], ans:0 },
+    { q:"For the pair 2x+3y=5 and 4x+6y=10, the system has:", opts:["Unique solution","No solution","Infinite solutions","Two solutions"], ans:2 },
+    { q:"Basic Proportionality Theorem is also known as:", opts:["Pythagoras Theorem","Thales Theorem","Angle Bisector Theorem","Mid-Point Theorem"], ans:1 },
+    { q:"Total Surface Area of a cylinder with radius r and height h is:", opts:["2πrh","πr²h","2πr(r+h)","πr(r+h)"], ans:2 },
+    { q:"sin²θ + cos²θ equals:", opts:["0","2","sin2θ","1"], ans:3 },
+    { q:"The value of sin 30° is:", opts:["√3/2","1/2","1/√2","1"], ans:1 },
+    { q:"In a frequency distribution, Mode = L + [(f₁−f₀)/(2f₁−f₀−f₂)] × h. Here 'L' stands for:", opts:["Upper limit","Lower limit of modal class","Frequency","Class width"], ans:1 },
+    { q:"Euclid's Division Lemma states that for integers a and b (b>0):", opts:["a = bq only","a = bq + r where 0 ≤ r < b","a = b + q + r","a × b = q + r"], ans:1 },
+  ],
+  "Physical Science":[
+    { q:"A body is thrown vertically upward. At the highest point, its velocity is:", opts:["Maximum","Equal to initial velocity","Zero","9.8 m/s"], ans:2 },
+    { q:"Newton's Second Law of Motion gives the definition of:", opts:["Inertia","Force","Momentum","Impulse"], ans:1 },
+    { q:"The SI unit of pressure is:", opts:["Newton","Joule","Pascal","Watt"], ans:2 },
+    { q:"Archimedes' Principle states that the upward force equals:", opts:["Weight of the object","Weight of fluid displaced","Mass of fluid","Volume of object"], ans:1 },
+    { q:"Total Internal Reflection occurs when light travels from:", opts:["Rarer to denser medium","Denser to rarer medium beyond critical angle","Air to water","Glass to denser glass"], ans:1 },
+    { q:"The phenomenon used in optical fibres is:", opts:["Refraction","Diffraction","Total Internal Reflection","Dispersion"], ans:2 },
+    { q:"Work done is zero when the angle between force and displacement is:", opts:["0°","45°","90°","180°"], ans:2 },
+    { q:"Mole concept: 1 mole of any substance contains:", opts:["6.022×10²³ particles","1000 particles","1 gram","6.022×10¹⁰ particles"], ans:0 },
+    { q:"Which of these is a homogeneous mixture?", opts:["Sand and water","Oil and water","Salt solution","Smoke"], ans:2 },
+    { q:"The subatomic particle NOT found in the nucleus is:", opts:["Proton","Neutron","Electron","None of these"], ans:2 },
+  ],
+  "Biological Science":[
+    { q:"The 'powerhouse' of the cell is:", opts:["Nucleus","Ribosome","Mitochondria","Chloroplast"], ans:2 },
+    { q:"Osmosis is the movement of:", opts:["Solute molecules from low to high concentration","Water molecules from high to low water concentration through semi-permeable membrane","Proteins through the membrane","All molecules equally"], ans:1 },
+    { q:"Xylem transports:", opts:["Food from leaves","Water and minerals upward","Hormones","Oxygen only"], ans:1 },
+    { q:"Which tissue is called the 'fluid connective tissue'?", opts:["Cartilage","Bone","Blood","Adipose"], ans:2 },
+    { q:"The Five Kingdom classification was proposed by:", opts:["Linnaeus","Darwin","Whittaker","Mendel"], ans:2 },
+    { q:"Anaerobic respiration in muscles produces:", opts:["Ethanol + CO₂","Lactic acid","ATP only","Water"], ans:1 },
+    { q:"The functional unit of the kidney is:", opts:["Neuron","Nephron","Alveolus","Villus"], ans:1 },
+    { q:"Reflex action is controlled by:", opts:["Brain","Spinal cord","Pituitary gland","Heart"], ans:1 },
+    { q:"Photosynthesis occurs in:", opts:["Mitochondria","Ribosome","Chloroplast","Nucleus"], ans:2 },
+    { q:"Which gland is known as the 'master gland'?", opts:["Thyroid","Adrenal","Pituitary","Pancreas"], ans:2 },
+  ],
+  "Social Studies":[
+    { q:"The Bastille was stormed on:", opts:["July 4, 1776","July 14, 1789","August 15, 1947","November 7, 1917"], ans:1 },
+    { q:"'Blood and Iron' policy is associated with:", opts:["Napoleon","Garibaldi","Bismarck","Mazzini"], ans:2 },
+    { q:"The Indian National Congress was founded in:", opts:["1857","1885","1905","1920"], ans:1 },
+    { q:"The longest river entirely within India is:", opts:["Ganga","Godavari","Indus","Narmada"], ans:1 },
+    { q:"India's climate is mainly governed by:", opts:["Trade winds","Monsoon","Westerlies","Polar winds"], ans:1 },
+    { q:"Mawsynram, the wettest place on Earth, is in:", opts:["Kerala","Assam","Meghalaya","Himachal Pradesh"], ans:2 },
+    { q:"The Preamble declares India as a:", opts:["Theocratic Federal Republic","Sovereign Socialist Secular Democratic Republic","Constitutional Monarchy","Federal Democratic State"], ans:1 },
+    { q:"Article 32 of the Indian Constitution is related to:", opts:["Right to Education","Right to Constitutional Remedies","Right to Equality","Right to Freedom"], ans:1 },
+    { q:"MGNREGA guarantees how many days of employment per year?", opts:["50 days","75 days","100 days","150 days"], ans:2 },
+    { q:"FCI stands for:", opts:["Food Conservation Institute","Food Corporation of India","Federal Commerce Institution","Food Credit Index"], ans:1 },
+  ],
+  English:[
+    { q:"'The Road Not Taken' is written by:", opts:["John Keats","William Wordsworth","Robert Frost","P.B. Shelley"], ans:2 },
+    { q:"In 'The Snake and the Mirror', what saved the doctor from the cobra?", opts:["He ran away","He called for help","The snake was fascinated by its own reflection","He killed the snake"], ans:2 },
+    { q:"'What Is Man Without the Beasts?' is a speech by:", opts:["Nelson Mandela","Chief Seattle","Ruskin Bond","Alphonse Daudet"], ans:1 },
+    { q:"In 'The Last Lesson', the order was that _____ must be taught instead of French.", opts:["English","German","Latin","Russian"], ans:1 },
+    { q:"'Wind' poem was originally written in:", opts:["Hindi","Telugu","Tamil","Bengali"], ans:2 },
+    { q:"Passive voice of 'She writes a letter' is:", opts:["A letter writes by her","A letter is written by her","A letter was written by her","She is writing a letter"], ans:1 },
+    { q:"'On Killing a Tree' poem argues that to kill a tree you must destroy:", opts:["Its leaves","Its branches","Its bark","Its root"], ans:3 },
+    { q:"A Slumber Did My Spirit Seal is part of Wordsworth's:", opts:["Daffodils series","Lucy poems","Prelude poems","Tintern Abbey series"], ans:1 },
+    { q:"A 'formal letter' should end with:", opts:["Yours lovingly","Yours truly/faithfully","Yours affectionately","With love"], ans:1 },
+    { q:"'A Legend of the Northland' is a:", opts:["Sonnet","Ballad","Free verse","Ode"], ans:1 },
+  ],
+  Hindi:[
+    { q:"'दो बैलों की कथा' के लेखक कौन हैं?", opts:["हजारी प्रसाद द्विवेदी","माखनलाल चतुर्वेदी","प्रेमचंद","महादेवी वर्मा"], ans:2 },
+    { q:"'ल्हासा की ओर' किस विधा की रचना है?", opts:["कविता","नाटक","यात्रा वृत्तांत","आत्मकथा"], ans:2 },
+    { q:"'पुष्प की अभिलाषा' में फूल कहाँ चढ़ाया जाना चाहता है?", opts:["देवालय में","प्रिया के बालों में","वीरों के मार्ग में","राजाओं के हार में"], ans:2 },
+    { q:"संज्ञा के कितने भेद होते हैं?", opts:["3","4","5","6"], ans:2 },
+    { q:"'ग्राम श्री' कविता किस ऋतु का वर्णन करती है?", opts:["वर्षा","शरद","ग्रीष्म","वसंत"], ans:1 },
+    { q:"रसखान किस भाषा में लिखते थे?", opts:["अवधी","खड़ी बोली","ब्रजभाषा","मैथिली"], ans:2 },
+    { q:"'मेरे बचपन के दिन' किसने लिखा?", opts:["महादेवी वर्मा","सुभद्रा कुमारी चौहान","मीराबाई","भारतेंदु हरिश्चंद्र"], ans:0 },
+    { q:"कबीर किस भक्ति शाखा के कवि थे?", opts:["सगुण भक्ति","निर्गुण भक्ति","वैष्णव भक्ति","शैव भक्ति"], ans:1 },
+    { q:"'प्रेमचंद के फटे जूते' किस विधा की रचना है?", opts:["कहानी","व्यंग्य निबंध","जीवनी","रिपोर्ताज"], ans:1 },
+    { q:"औपचारिक पत्र में 'समाप्ति' में क्या लिखते हैं?", opts:["आपका मित्र","तुम्हारा","भवदीय/भवदीया","प्रिय मित्र"], ans:2 },
+  ],
+  Telugu:[
+    { q:"వేమన శతకం ఏ ఛందంలో రాయబడింది?", opts:["ఉత్పలమాల","కందం","ఆటవెలది","సీసం"], ans:2 },
+    { q:"పోతన ఏ గ్రంథాన్ని రాశారు?", opts:["రామాయణం","మహాభాగవతం","భారతం","రఘువంశం"], ans:1 },
+    { q:"సంధి అనగా:", opts:["పదాల విభజన","రెండు పదాల ధ్వని కలయిక","వాక్యం","అలంకారం"], ans:1 },
+    { q:"ఉపమ అలంకారం ఎప్పుడు ఉంటుంది?", opts:["పోలిక స్పష్టంగా చెప్పినప్పుడు","రూపకంగా చెప్పినప్పుడు","ఊహించినప్పుడు","విరుద్ధంగా చెప్పినప్పుడు"], ans:0 },
+    { q:"'మాతృభూమి' పాఠంలో ముఖ్య విషయం:", opts:["వ్యాపారం","దేశభక్తి","ప్రేమ","విద్య"], ans:1 },
+    { q:"సుమతీ శతకం ఎవరు రాశారు?", opts:["వేమన","పోతన","బద్దెన","తిక్కన"], ans:2 },
+    { q:"ద్వంద్వ సమాసంలో:", opts:["ముందు పదం ప్రధానం","రెండు పదాలూ సమానం","చివరి పదం ప్రధానం","వేరే పదం ప్రధానం"], ans:1 },
+    { q:"'పర్యావరణం' పాఠం ముఖ్య సందేశం:", opts:["నీటి వినియోగం","పర్యావరణ సంరక్షణ","వ్యవసాయం","పారిశ్రామికీకరణ"], ans:1 },
+    { q:"లేఖలో అధికారిక లేఖను ఏమని ముగిస్తారు?", opts:["మీ స్నేహితుడు","మీ విధేయుడు","మీ ప్రేమతో","మీ సోదరుడు"], ans:1 },
+    { q:"కందపద్యం ఏ కవి ఎక్కువగా వాడారు?", opts:["వేమన","పోతన","నన్నయ","తిక్కన"], ans:1 },
+  ],
+};
+
+function StudyScreen({ student }) {
+  const [subject, setSubject]       = useState(null);
+  const [secIdx,  setSecIdx]        = useState(0);
+  const [chapter, setChapter]       = useState(null);
+  const [tab,     setTab]           = useState("notes");
+  const [quizIdx, setQuizIdx]       = useState(0);
+  const [selected,setSelected]      = useState(null);
+  const [answered,setAnswered]      = useState(false);
+  const [score,   setScore]         = useState(0);
+  const [quizDone,setQuizDone]      = useState(false);
+  const [aiOpen,  setAiOpen]        = useState(false);
+  const [aiInput, setAiInput]       = useState("");
+  const [aiMsgs,  setAiMsgs]        = useState([
+    { role:"assistant", content:`Hi Thanmaya! 👋 I'm your AI Tutor for Class 9, Telangana State Board. I can help you with Maths, Physical Science, Biological Science, Social Studies, English, Hindi, and Telugu. Ask me anything — in English or Telugu! 😊` }
+  ]);
+  const [aiLoading,setAiLoading]    = useState(false);
+
+  const resetQuiz = () => { setQuizIdx(0); setSelected(null); setAnswered(false); setScore(0); setQuizDone(false); };
+
+  const sendAI = async () => {
+    if (!aiInput.trim() || aiLoading) return;
+    const msg = aiInput.trim(); setAiInput("");
+    setAiMsgs(p=>[...p,{role:"user",content:msg}]);
+    setAiLoading(true);
+    try {
+      const res = await fetch("https://api.anthropic.com/v1/messages",{
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({
+          model:"claude-sonnet-4-20250514", max_tokens:1000,
+          system:`You are a friendly AI tutor for Koppula Thanmaya Sri, Class 9 student at St. Stephen's School, Telangana State Board. 
+Subjects: Mathematics, Physical Science (Physics+Chemistry), Biological Science, Social Studies, English, Hindi, Telugu.
+Keep explanations simple and age-appropriate (14 years). Use examples from daily life. Be warm and encouraging.
+For Maths/Science: break into clear numbered steps. For languages: explain meaning, literary devices, context.
+Keep responses concise (4–6 sentences) unless a detailed explanation is genuinely needed.
+If the student writes in Telugu script, reply in Telugu. If in Hindi, reply in Hindi. Otherwise English.
+Always end with one encouraging line.`,
+          messages:[...aiMsgs.filter(m=>m.role!=="system").slice(-10),{role:"user",content:msg}]
+        })
+      });
+      const data = await res.json();
+      const reply = data.content?.[0]?.text || "Sorry, I had trouble connecting. Please try again!";
+      setAiMsgs(p=>[...p,{role:"assistant",content:reply}]);
+    } catch(e) {
+      setAiMsgs(p=>[...p,{role:"assistant",content:"Sorry, I'm having trouble connecting right now. Please try again in a moment! 🙏"}]);
+    }
+    setAiLoading(false);
+  };
+
+  const subjectList = Object.keys(SYLLABUS);
+
+  // ── Subject Selection ──────────────────────────────────────────────────────
+  if (!subject) return (
+    <div style={{padding:"16px 16px 80px",display:"flex",flexDirection:"column",gap:14}}>
+      <div style={{fontSize:20,fontWeight:900,color:"#1e293b",fontFamily:font}}>📖 Study & Learn</div>
+      <Card style={{background:"linear-gradient(135deg,#1a1a2e,#16213e)",color:"white"}}>
+        <div style={{fontSize:14,fontWeight:800}}>📚 Class 9 — Telangana State Board 2025–26</div>
+        <div style={{fontSize:11,opacity:0.6,marginTop:4}}>7 subjects · Official SCERT Curriculum · Tap to explore</div>
+        <div style={{display:"flex",gap:6,marginTop:12,flexWrap:"wrap"}}>
+          {[["100","Telugu"],["100","Hindi"],["100","English"],["100","Maths"],["50","Phy.Sci"],["50","Bio.Sci"],["100","Soc.St"]].map(([m,s])=>(
+            <div key={s} style={{background:"rgba(255,255,255,0.1)",borderRadius:8,padding:"4px 8px",textAlign:"center"}}>
+              <div style={{fontSize:11,fontWeight:800,color:"#e2b96f"}}>{m}</div>
+              <div style={{fontSize:9,opacity:0.7}}>{s}</div>
+            </div>
+          ))}
+        </div>
+      </Card>
+      <div style={{display:"flex",flexDirection:"column",gap:10}}>
+        {subjectList.map(sub=>{
+          const sd=SYLLABUS[sub];
+          const chapCount = sd.sections.reduce((t,s)=>t+s.chapters.length,0);
+          return (
+            <div key={sub} onClick={()=>{setSubject(sub);setSecIdx(0);setChapter(null);}}
+              style={{background:"white",borderRadius:14,padding:"14px 16px",cursor:"pointer",
+                boxShadow:"0 2px 8px rgba(0,0,0,0.07)",display:"flex",alignItems:"center",gap:14,
+                border:`1.5px solid ${sd.light}`}}>
+              <div style={{width:50,height:50,borderRadius:12,background:sd.light,
+                display:"flex",alignItems:"center",justifyContent:"center",fontSize:26,flexShrink:0}}>{sd.icon}</div>
+              <div style={{flex:1}}>
+                <div style={{fontSize:15,fontWeight:800,color:"#1e293b"}}>{sub}</div>
+                <div style={{fontSize:11,color:"#94a3b8",marginTop:2}}>{sd.sections.length} sections · {chapCount} chapters</div>
+                <div style={{fontSize:10,color:sd.color,fontWeight:700,marginTop:2}}>{sd.exam.split("|")[0].trim()}</div>
+              </div>
+              <div style={{fontSize:20,color:"#94a3b8"}}>›</div>
+            </div>
+          );
+        })}
+      </div>
+      <AiBtn onOpen={()=>setAiOpen(true)}/>
+      {aiOpen&&<AiTutorModal messages={aiMsgs} input={aiInput} setInput={setAiInput} onSend={sendAI} loading={aiLoading} onClose={()=>setAiOpen(false)}/>}
+    </div>
+  );
+
+  const sd = SYLLABUS[subject];
+  const sections = sd.sections;
+  const curSec = sections[secIdx];
+
+  // ── Chapter Selection ──────────────────────────────────────────────────────
+  if (!chapter) return (
+    <div style={{padding:"16px 16px 80px",display:"flex",flexDirection:"column",gap:14}}>
+      <div style={{display:"flex",alignItems:"center",gap:10}}>
+        <BtnBack onClick={()=>setSubject(null)}/>
+        <div style={{fontSize:17,fontWeight:900,color:"#1e293b",fontFamily:font}}>{sd.icon} {subject}</div>
+      </div>
+      <Card style={{background:`linear-gradient(135deg,${sd.color}cc,${sd.color})`,color:"white"}}>
+        <div style={{fontSize:12,fontWeight:800}}>{sd.exam}</div>
+      </Card>
+      {sections.length>1&&(
+        <div style={{display:"flex",gap:6,overflowX:"auto"}}>
+          {sections.map((s,i)=>(
+            <button key={i} onClick={()=>setSecIdx(i)} style={{padding:"8px 14px",borderRadius:20,border:"none",
+              cursor:"pointer",whiteSpace:"nowrap",background:secIdx===i?sd.color:"#f1f5f9",
+              color:secIdx===i?"white":"#64748b",fontWeight:700,fontSize:11,fontFamily:font}}>{s.title}</button>
+          ))}
+        </div>
+      )}
+      <div style={{fontSize:12,fontWeight:800,color:"#94a3b8",textTransform:"uppercase",letterSpacing:1}}>{curSec.title}</div>
+      {curSec.chapters.map((ch,i)=>(
+        <div key={ch.id} onClick={()=>{setChapter(ch);setTab("notes");resetQuiz();}}
+          style={{background:"white",borderRadius:14,padding:"14px 16px",cursor:"pointer",
+            boxShadow:"0 2px 8px rgba(0,0,0,0.06)",border:`1.5px solid ${sd.light}`}}>
+          <div style={{display:"flex",alignItems:"flex-start",gap:12}}>
+            <div style={{width:34,height:34,borderRadius:8,background:sd.light,display:"flex",
+              alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:800,color:sd.color,flexShrink:0}}>{i+1}</div>
+            <div style={{flex:1}}>
+              <div style={{fontSize:14,fontWeight:800,color:"#1e293b"}}>{ch.title}</div>
+              <div style={{fontSize:11,color:"#94a3b8",marginTop:4,lineHeight:1.5}}>{ch.topics.slice(0,3).join(" · ")}{ch.topics.length>3?"...":""}</div>
+            </div>
+            <div style={{fontSize:18,color:"#94a3b8"}}>›</div>
+          </div>
+        </div>
+      ))}
+      <AiBtn onOpen={()=>setAiOpen(true)}/>
+      {aiOpen&&<AiTutorModal messages={aiMsgs} input={aiInput} setInput={setAiInput} onSend={sendAI} loading={aiLoading} onClose={()=>setAiOpen(false)}/>}
+    </div>
+  );
+
+  // ── Chapter Content ────────────────────────────────────────────────────────
+  const qs = MOCK_QUESTIONS[subject]||[];
+  const cq = qs[quizIdx];
+
+  return (
+    <div style={{padding:"16px 16px 80px",display:"flex",flexDirection:"column",gap:14}}>
+      <div style={{display:"flex",alignItems:"center",gap:8}}>
+        <BtnBack onClick={()=>setChapter(null)}/>
+        <div style={{fontSize:14,fontWeight:800,color:"#1e293b",flex:1,fontFamily:font,lineHeight:1.3}}>{chapter.title}</div>
+      </div>
+
+      {/* Topics chips */}
+      <Card style={{background:sd.light,border:`1.5px solid ${sd.color}33`}}>
+        <div style={{fontSize:10,fontWeight:800,color:sd.color,marginBottom:8,textTransform:"uppercase",letterSpacing:1}}>Topics</div>
+        <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+          {chapter.topics.map(t=>(
+            <span key={t} style={{background:"white",color:sd.color,fontSize:11,fontWeight:700,
+              padding:"4px 10px",borderRadius:20,border:`1px solid ${sd.color}44`}}>{t}</span>
+          ))}
+        </div>
+      </Card>
+
+      {/* Tab switcher */}
+      <div style={{display:"flex",gap:6}}>
+        {[["notes","📝 Notes"],["videos","🎥 Videos"],["quiz","✏️ Quiz"]].map(([t,l])=>(
+          <button key={t} onClick={()=>{setTab(t);if(t==="quiz")resetQuiz();}}
+            style={{flex:1,padding:"10px 0",borderRadius:12,border:"none",cursor:"pointer",
+              background:tab===t?sd.color:"#f1f5f9",color:tab===t?"white":"#64748b",
+              fontWeight:700,fontSize:12,fontFamily:font}}>{l}</button>
+        ))}
+      </div>
+
+      {/* NOTES */}
+      {tab==="notes"&&(
+        <div style={{display:"flex",flexDirection:"column",gap:12}}>
+          <Card style={{background:sd.light,border:`1.5px solid ${sd.color}33`}}>
+            <div style={{fontSize:14,fontWeight:800,color:sd.color,marginBottom:12}}>📝 Study Notes</div>
+            <div style={{fontSize:13,color:"#334155",lineHeight:1.8,whiteSpace:"pre-wrap"}}>{chapter.notes}</div>
+          </Card>
+          <div onClick={()=>setAiOpen(true)} style={{background:`linear-gradient(135deg,${sd.color},${sd.color}cc)`,
+            borderRadius:12,padding:"14px",textAlign:"center",cursor:"pointer",color:"white",fontWeight:800,fontSize:13,fontFamily:font}}>
+            🤖 Ask AI Tutor to explain "{chapter.title}"
+          </div>
+        </div>
+      )}
+
+      {/* VIDEOS */}
+      {tab==="videos"&&(
+        <div style={{display:"flex",flexDirection:"column",gap:12}}>
+          <Card style={{background:"#f8fafc",border:"1.5px solid #e2e8f0"}}>
+            <div style={{fontSize:12,fontWeight:700,color:"#64748b"}}>🎥 Tap any card to search YouTube for this topic</div>
+          </Card>
+          {[
+            {label:"Telugu Medium Explanation",q:`${chapter.title} class 9 Telugu medium Telangana state board`},
+            {label:"English Medium Full Lesson",q:`${chapter.title} class 9 English medium Telangana SCERT`},
+            {label:"Concept Made Easy",q:`${chapter.title} class 9 easy explanation animated`},
+            {label:"Practice Problems & Solutions",q:`${chapter.title} class 9 solved problems exercises`},
+            {label:"Revision & Quick Summary",q:`${chapter.title} class 9 revision quick notes`},
+          ].map((v,i)=>(
+            <a key={i} href={`https://www.youtube.com/results?search_query=${encodeURIComponent(v.q)}`}
+              target="_blank" rel="noreferrer" style={{textDecoration:"none"}}>
+              <Card style={{display:"flex",gap:12,alignItems:"center",border:`1.5px solid ${sd.light}`,cursor:"pointer"}}>
+                <div style={{width:60,height:44,borderRadius:10,background:"#000",display:"flex",
+                  alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                  <div style={{width:0,height:0,borderTop:"7px solid transparent",
+                    borderBottom:"7px solid transparent",borderLeft:"13px solid white",marginLeft:3}}/>
+                </div>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:13,fontWeight:700,color:"#1e293b"}}>{v.label}</div>
+                  <div style={{fontSize:11,color:"#64748b",marginTop:2}}>{chapter.title} · Class 9</div>
+                  <div style={{fontSize:10,color:"#E53E3E",fontWeight:700,marginTop:2}}>▶ Open YouTube</div>
+                </div>
+              </Card>
+            </a>
+          ))}
+        </div>
+      )}
+
+      {/* QUIZ */}
+      {tab==="quiz"&&(
+        <div style={{display:"flex",flexDirection:"column",gap:12}}>
+          {qs.length===0&&(
+            <Card style={{textAlign:"center",padding:24}}>
+              <div style={{fontSize:13,color:"#94a3b8"}}>Quiz questions coming soon for this subject!</div>
+            </Card>
+          )}
+          {qs.length>0&&quizDone&&(
+            <Card style={{textAlign:"center",padding:32}}>
+              <div style={{fontSize:48,marginBottom:12}}>{score>=8?"🏆":score>=6?"👍":"💪"}</div>
+              <div style={{fontSize:20,fontWeight:900,color:"#1e293b",fontFamily:font}}>Quiz Complete!</div>
+              <div style={{fontSize:18,fontWeight:700,color:score>=8?"#38A169":score>=6?"#D69E2E":"#E53E3E",marginTop:8}}>
+                {score} / {qs.length}
+              </div>
+              <div style={{fontSize:13,color:"#94a3b8",marginTop:8,marginBottom:20}}>
+                {score===qs.length?"Perfect! Outstanding work! 🌟":score>=8?"Excellent! Keep it up! 👏":score>=6?"Good effort! Review and retry! 📚":"Don't give up! Study the notes and try again! 💪"}
+              </div>
+              <Btn onClick={resetQuiz}>Try Again 🔄</Btn>
+            </Card>
+          )}
+          {qs.length>0&&!quizDone&&cq&&(
+            <>
+              <Card style={{background:"linear-gradient(135deg,#1a1a2e,#16213e)",color:"white"}}>
+                <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
+                  <div style={{fontSize:11,fontWeight:700,opacity:0.6}}>Q {quizIdx+1} of {qs.length}</div>
+                  <div style={{fontSize:11,fontWeight:800,color:"#e2b96f"}}>Score: {score}</div>
+                </div>
+                <div style={{background:"rgba(255,255,255,0.1)",borderRadius:6,height:4,marginBottom:14}}>
+                  <div style={{height:"100%",borderRadius:6,background:"#e2b96f",width:`${(quizIdx/qs.length)*100}%`}}/>
+                </div>
+                <div style={{fontSize:14,fontWeight:700,lineHeight:1.6}}>{cq.q}</div>
+              </Card>
+              {cq.opts.map((opt,i)=>{
+                let bg="white",col="#1e293b",brd="1.5px solid #e2e8f0";
+                if(answered){
+                  if(i===cq.ans){bg="#F0FFF4";col="#38A169";brd="1.5px solid #38A169";}
+                  else if(i===selected&&i!==cq.ans){bg="#FFF5F5";col="#E53E3E";brd="1.5px solid #E53E3E";}
+                }
+                return (
+                  <div key={i} onClick={()=>{if(!answered){setSelected(i);setAnswered(true);if(i===cq.ans)setScore(p=>p+1);}}}
+                    style={{background:bg,borderRadius:12,padding:"14px 16px",cursor:answered?"default":"pointer",
+                      border:brd,display:"flex",alignItems:"center",gap:12,transition:"all 0.2s"}}>
+                    <div style={{width:28,height:28,borderRadius:"50%",flexShrink:0,display:"flex",
+                      alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:800,
+                      background:answered&&i===cq.ans?"#38A169":answered&&i===selected?"#E53E3E":"#f1f5f9",
+                      color:answered&&(i===cq.ans||i===selected)?"white":"#64748b"}}>
+                      {["A","B","C","D"][i]}
+                    </div>
+                    <div style={{fontSize:13,fontWeight:600,color:col,flex:1}}>{opt}</div>
+                    {answered&&i===cq.ans&&<span style={{fontSize:18}}>✅</span>}
+                    {answered&&i===selected&&i!==cq.ans&&<span style={{fontSize:18}}>❌</span>}
+                  </div>
+                );
+              })}
+              {answered&&(
+                <Btn onClick={()=>{
+                  if(quizIdx+1>=qs.length){setQuizDone(true);}
+                  else{setQuizIdx(p=>p+1);setSelected(null);setAnswered(false);}
+                }}>{quizIdx+1<qs.length?"Next Question →":"See Results 🏆"}</Btn>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      <AiBtn onOpen={()=>setAiOpen(true)}/>
+      {aiOpen&&<AiTutorModal messages={aiMsgs} input={aiInput} setInput={setAiInput} onSend={sendAI} loading={aiLoading} onClose={()=>setAiOpen(false)}/>}
+    </div>
+  );
+}
+
+function AiBtn({onOpen}){
+  return (
+    <div onClick={onOpen} style={{position:"fixed",bottom:82,right:16,width:56,height:56,borderRadius:28,
+      background:"linear-gradient(135deg,#e2b96f,#c9943a)",display:"flex",alignItems:"center",
+      justifyContent:"center",fontSize:24,cursor:"pointer",boxShadow:"0 4px 20px rgba(201,148,58,0.5)",zIndex:200}}>🤖</div>
+  );
+}
+
+function BtnBack({onClick}){
+  return (
+    <button onClick={onClick} style={{background:"#f1f5f9",border:"none",borderRadius:10,
+      padding:"8px 12px",cursor:"pointer",fontFamily:font,fontWeight:700,fontSize:12,color:"#64748b",flexShrink:0}}>← Back</button>
+  );
+}
+
+function AiTutorModal({messages,input,setInput,onSend,loading,onClose}){
+  const endRef = React.useRef(null);
+  React.useEffect(()=>{endRef.current?.scrollIntoView({behavior:"smooth"});},[messages]);
+  return (
+    <div style={{position:"fixed",inset:0,zIndex:500,display:"flex",flexDirection:"column",
+      background:"rgba(0,0,0,0.5)",justifyContent:"flex-end"}}>
+      <div style={{background:"white",borderRadius:"20px 20px 0 0",height:"75vh",display:"flex",
+        flexDirection:"column",maxWidth:420,width:"100%",margin:"0 auto"}}>
+        <div style={{padding:"16px 20px",borderBottom:"1px solid #f1f5f9",display:"flex",alignItems:"center",gap:12}}>
+          <div style={{width:40,height:40,borderRadius:20,background:"linear-gradient(135deg,#e2b96f,#c9943a)",
+            display:"flex",alignItems:"center",justifyContent:"center",fontSize:20}}>🤖</div>
+          <div style={{flex:1}}>
+            <div style={{fontSize:14,fontWeight:800,color:"#1e293b",fontFamily:font}}>AI Tutor</div>
+            <div style={{fontSize:11,color:"#38A169",fontWeight:600}}>● Class 9 · Telangana Board · All Subjects</div>
+          </div>
+          <button onClick={onClose} style={{background:"#f1f5f9",border:"none",borderRadius:20,
+            width:32,height:32,cursor:"pointer",fontSize:16,fontFamily:font}}>✕</button>
+        </div>
+        <div style={{flex:1,overflowY:"auto",padding:16,display:"flex",flexDirection:"column",gap:10}}>
+          {messages.map((m,i)=>(
+            <div key={i} style={{display:"flex",justifyContent:m.role==="user"?"flex-end":"flex-start"}}>
+              <div style={{maxWidth:"82%",padding:"10px 14px",fontSize:13,lineHeight:1.6,fontFamily:font,
+                borderRadius:m.role==="user"?"18px 18px 4px 18px":"18px 18px 18px 4px",
+                background:m.role==="user"?"linear-gradient(135deg,#1a1a2e,#16213e)":"#f8fafc",
+                color:m.role==="user"?"white":"#1e293b",
+                border:m.role==="assistant"?"1.5px solid #f1f5f9":"none"}}>
+                {m.content}
+              </div>
+            </div>
+          ))}
+          {loading&&(
+            <div style={{display:"flex",justifyContent:"flex-start"}}>
+              <div style={{background:"#f8fafc",border:"1.5px solid #f1f5f9",borderRadius:"18px 18px 18px 4px",
+                padding:"10px 16px",fontSize:13,color:"#94a3b8",fontFamily:font}}>Thinking... 💭</div>
+            </div>
+          )}
+          <div ref={endRef}/>
+        </div>
+        <div style={{padding:"12px 16px",borderTop:"1px solid #f1f5f9",display:"flex",gap:8}}>
+          <input value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")onSend();}}
+            placeholder="Ask about any topic... or type in Telugu!"
+            style={{flex:1,padding:"11px 14px",borderRadius:24,border:"1.5px solid #e2e8f0",
+              fontSize:13,fontFamily:font,outline:"none",background:"#f8fafc"}}/>
+          <button onClick={onSend} disabled={loading||!input.trim()}
+            style={{width:44,height:44,borderRadius:22,border:"none",cursor:"pointer",fontSize:18,
+              background:input.trim()?"linear-gradient(135deg,#e2b96f,#c9943a)":"#f1f5f9",
+              display:"flex",alignItems:"center",justifyContent:"center"}}>→</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── App Shell ───────────────────────────────────────────────────────────────
+
+export default function App() {
+  const [screen, setScreen]           = useState("login");
+  const [role, setRole]               = useState("student");
+  const [activeTab, setActiveTab]     = useState("home");
+  const [students, setStudents]       = useState(INITIAL_STUDENTS);
+  const [housePoints, setHousePoints] = useState(INITIAL_HOUSE_POINTS);
+  const [events, setEvents]           = useState(INITIAL_EVENTS);
+
+  // Demo: student = Koppula Thanmaya Sri, parent = Muddam Shankar (has 2 kids: Divya & Manoj)
+  const loggedParent = PARENTS[1];
+
+  const handleLogin = (r) => {
+    setRole(r);
+    setActiveTab("home");
+    setScreen("app");
+  };
+
+  const tabConfig = {
+    student: [
+      {id:"home",   icon:"🏠", label:"Home"},
+      {id:"houses", icon:"🏆", label:"Houses"},
+      {id:"learn",  icon:"📖", label:"Study"},
+      {id:"events", icon:"📅", label:"Events"},
+    ],
+    parent: [
+      {id:"home",   icon:"🏠", label:"My Child"},
+      {id:"learn",  icon:"📖", label:"Study"},
+      {id:"events", icon:"📅", label:"Events"},
+    ],
+    teacher: [
+      {id:"home",   icon:"📋", label:"Admin"},
+    ],
+  };
+
+  const tabs = tabConfig[role];
+
+  const roleLabels = {
+    student: "👤 Student View",
+    parent:  "👨‍👩‍👧 Parent View",
+    teacher: "🔐 Teacher Admin",
+  };
+
+  const renderContent = () => {
+    if (role==="student") {
+      if (activeTab==="home")   return <StudentHome students={students} />;
+      if (activeTab==="houses") return <StudentHouses housePoints={housePoints} students={students} />;
+      if (activeTab==="learn")  return <StudyScreen student={students[0]} />;
+      if (activeTab==="events") return <StudentEvents events={events} />;
+    }
+    if (role==="parent") {
+      if (activeTab==="home")   return <ParentHome parent={loggedParent} students={students} />;
+      if (activeTab==="learn")  return <StudyScreen student={students[0]} />;
+      if (activeTab==="events") return <ParentEvents events={events} />;
+    }
+    if (role==="teacher") {
+      return <AdminPanel students={students} setStudents={setStudents}
+        housePoints={housePoints} setHousePoints={setHousePoints}
+        events={events} setEvents={setEvents} />;
+    }
+  };
+
+  if (screen==="login") return <LoginScreen onLogin={handleLogin} />;
+
+  return (
+    <div style={{ maxWidth:420, margin:"0 auto", background:"#f8fafc", minHeight:"100vh", fontFamily:font }}>
+
+      {/* Top bar */}
+      <div style={{ position:"sticky", top:0, zIndex:100, background:"white",
+        borderBottom:"1px solid #f1f5f9", padding:"12px 16px",
+        display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+        <div>
+          <div style={{ fontSize:15, fontWeight:900, color:"#1a1a2e" }}>St. Stephen's</div>
+          <div style={{ fontSize:9, color:"#94a3b8", fontWeight:700, letterSpacing:1, textTransform:"uppercase" }}>
+            {roleLabels[role]}
+          </div>
+        </div>
+        <div style={{ display:"flex", gap:5 }}>
+          {Object.values(HOUSES).map(h=>(
+            <div key={h.emoji} style={{ width:8, height:8, borderRadius:"50%", background:h.color }} />
+          ))}
+        </div>
+        <button onClick={()=>setScreen("login")} style={{ padding:"6px 12px", borderRadius:20,
+          border:"1.5px solid #e2e8f0", background:"#f8fafc", color:"#64748b",
+          fontWeight:700, fontSize:11, cursor:"pointer", fontFamily:font }}>Logout</button>
+      </div>
+
+      {renderContent()}
+
+      {/* Bottom nav */}
+      <div style={{ position:"fixed", bottom:0, left:"50%", transform:"translateX(-50%)",
+        width:"100%", maxWidth:420, background:"white", borderTop:"1px solid #f1f5f9",
+        display:"flex", boxShadow:"0 -4px 20px rgba(0,0,0,0.08)", zIndex:100 }}>
+        {tabs.map(t=>(
+          <button key={t.id} onClick={()=>setActiveTab(t.id)} style={{ flex:1, padding:"10px 0 8px",
+            border:"none", background:"transparent", cursor:"pointer",
+            display:"flex", flexDirection:"column", alignItems:"center", gap:2, fontFamily:font,
+            borderTop:activeTab===t.id?"2.5px solid #1a1a2e":"2.5px solid transparent" }}>
+            <span style={{ fontSize:20 }}>{t.icon}</span>
+            <span style={{ fontSize:9, fontWeight:700, color:activeTab===t.id?"#1a1a2e":"#94a3b8" }}>{t.label}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
