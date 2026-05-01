@@ -7,6 +7,7 @@
   <script src="https://cdn.jsdelivr.net/npm/react@18.2.0/umd/react.production.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.23.5/babel.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
   <style>
     * { margin:0; padding:0; box-sizing:border-box; }
     body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background:#1a1a2e; }
@@ -44,6 +45,21 @@
     };
   </script>
   <script type="text/babel">
+// ─── AgentEdge Config — live credentials live here and nowhere else ──────────
+const AGENTEDGE_CONFIG = {
+  supabase: {
+    url:        'https://smmuhefyaydmryoqzxtc.supabase.co',
+    anonKey:    'sb_publishable_tGqDAHbv_u2JVbnAJBTY_w_4poLChFo',
+    schema:     'biz_001',
+    businessId: 'cc460eea-9945-4e60-a17d-2a93754d5659',
+  },
+};
+const db = window.supabase.createClient(
+  AGENTEDGE_CONFIG.supabase.url,
+  AGENTEDGE_CONFIG.supabase.anonKey,
+  { db: { schema: AGENTEDGE_CONFIG.supabase.schema } }
+);
+
     const { useState, useRef, useEffect } = React;
 
 // ─── Data ──────────────────────────────────────────────────────────────────
@@ -159,42 +175,57 @@ function Toast({ msg }) {
 
 // ─── Login ──────────────────────────────────────────────────────────────────
 
-// ─── Login ──────────────────────────────────────────────────────────────────
-
-const CREDENTIALS = {
-  student: { username:"9A01",   password:"Thanmaya@9"  },
-  parent:  { username:"PAR002", password:"Shankar@123" },
-  teacher: { username:"TCH001", password:"Admin@123"   },
-};
-
 function LoginScreen({ onLogin }) {
-  const [role,    setRole]   = useState("student");
-  const [uname,   setUname]  = useState("");
+  const [email,   setEmail]  = useState("");
   const [pwd,     setPwd]    = useState("");
   const [error,   setError]  = useState("");
   const [showPwd, setShowPwd]= useState(false);
+  const [loading, setLoading]= useState(false);
 
-  const roles = [["student","👤 Student"],["parent","👨‍👩‍👧 Parent"],["teacher","📋 Teacher"]];
+  const handleSignIn = async () => {
+    if (!email.trim() || !pwd) return;
+    setLoading(true); setError("");
 
-  const info = {
-    student: { label:"Koppula Thanmaya Sri · Class 9A", userHint:"Roll No" },
-    parent:  { label:"Mr. Muddam Shankar · Parent",     userHint:"Parent ID" },
-    teacher: { label:"Teacher / Admin",                  userHint:"Staff ID" },
-  };
-
-  const handleSignIn = () => {
-    const c = CREDENTIALS[role];
-    if (uname.trim() === c.username && pwd === c.password) {
-      setError(""); onLogin(role);
-    } else {
-      setError("Incorrect username or password. Please try again.");
+    const { data: authData, error: authErr } =
+      await db.auth.signInWithPassword({ email: email.trim(), password: pwd });
+    if (authErr) {
+      setError(authErr.message);
+      setLoading(false); return;
     }
-  };
 
-  const autoFill = () => {
-    setUname(CREDENTIALS[role].username);
-    setPwd(CREDENTIALS[role].password);
-    setError("");
+    const { data: roleRaw, error: roleErr } =
+      await db.rpc('get_user_role');
+    if (roleErr) {
+      await db.auth.signOut();
+      setError("Could not verify your account. Please try again.");
+      setLoading(false); return;
+    }
+    if (!roleRaw) {
+      await db.auth.signOut();
+      setError("Account not provisioned. Contact your administrator.");
+      setLoading(false); return;
+    }
+
+    const role = roleRaw; // title-case from INITCAP: 'Teacher', 'Principal', 'Parent', 'Student'
+
+    let assignment = null;
+    if (role === 'Teacher') {
+      const { data: asgn, error: asgnErr } = await db
+        .from('teacher_assignments')
+        .select('class, section, role')
+        .eq('auth_user_id', authData.session.user.id)
+        .eq('is_active', true)
+        .single();
+      if (asgnErr || !asgn) {
+        await db.auth.signOut();
+        setError("No active class assignment found. Contact your administrator.");
+        setLoading(false); return;
+      }
+      assignment = asgn;
+    }
+
+    setLoading(false);
+    onLogin(role, assignment);
   };
 
   return (
@@ -211,45 +242,9 @@ function LoginScreen({ onLogin }) {
           <div style={{ color:"#94a3b8", fontSize:12, fontWeight:600, letterSpacing:2, textTransform:"uppercase", marginTop:2 }}>School Portal</div>
         </div>
 
-        <div style={{ background:"rgba(255,255,255,0.08)", borderRadius:12, padding:4, display:"flex", marginBottom:20 }}>
-          {roles.map(([r,label])=>(
-            <button key={r} onClick={()=>{ setRole(r); setUname(""); setPwd(""); setError(""); }}
-              style={{ flex:1, padding:"10px 0", borderRadius:10, border:"none", cursor:"pointer",
-                background:role===r?"white":"transparent", color:role===r?"#1a1a2e":"#94a3b8",
-                fontWeight:700, fontSize:11, fontFamily:font, transition:"all 0.2s" }}>
-              {label}
-            </button>
-          ))}
-        </div>
-
-        <div style={{ background:"rgba(226,185,111,0.12)", border:"1.5px solid rgba(226,185,111,0.3)",
-          borderRadius:12, padding:"12px 14px", marginBottom:18 }}>
-          <div style={{ color:"#e2b96f", fontSize:10, fontWeight:800, letterSpacing:1,
-            textTransform:"uppercase", marginBottom:8 }}>🔑 Demo Credentials</div>
-          <div style={{ color:"#cbd5e1", fontSize:12, fontWeight:700, marginBottom:8 }}>{info[role].label}</div>
-          <div style={{ display:"flex", gap:20 }}>
-            <div>
-              <div style={{ color:"#64748b", fontSize:10, fontWeight:600 }}>USERNAME</div>
-              <div style={{ color:"white", fontSize:14, fontWeight:800, fontFamily:"monospace", letterSpacing:1 }}>
-                {CREDENTIALS[role].username}
-              </div>
-            </div>
-            <div>
-              <div style={{ color:"#64748b", fontSize:10, fontWeight:600 }}>PASSWORD</div>
-              <div style={{ color:"white", fontSize:14, fontWeight:800, fontFamily:"monospace", letterSpacing:1 }}>
-                {CREDENTIALS[role].password}
-              </div>
-            </div>
-          </div>
-          <div onClick={autoFill} style={{ marginTop:10, background:"rgba(226,185,111,0.2)", borderRadius:8,
-            padding:"8px 12px", textAlign:"center", cursor:"pointer", color:"#e2b96f", fontSize:11, fontWeight:800 }}>
-            ⚡ Auto-fill Credentials
-          </div>
-        </div>
-
         <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
-          <input value={uname} onChange={e=>{ setUname(e.target.value); setError(""); }}
-            placeholder={info[role].userHint}
+          <input type="email" value={email} onChange={e=>{ setEmail(e.target.value); setError(""); }}
+            placeholder="Email address"
             style={{ padding:"14px 16px", borderRadius:12, boxSizing:"border-box", width:"100%",
               border:`1.5px solid ${error?"#E53E3E":"rgba(255,255,255,0.1)"}`,
               background:"rgba(255,255,255,0.07)", color:"white", fontSize:14, fontFamily:font, outline:"none" }} />
@@ -274,16 +269,17 @@ function LoginScreen({ onLogin }) {
             </div>
           )}
 
-          <button onClick={handleSignIn}
-            style={{ padding:"15px", borderRadius:12, border:"none", cursor:"pointer",
+          <button onClick={handleSignIn} disabled={loading}
+            style={{ padding:"15px", borderRadius:12, border:"none", cursor:loading?"not-allowed":"pointer",
               background:"linear-gradient(135deg,#e2b96f,#c9943a)", color:"white",
-              fontWeight:800, fontSize:15, fontFamily:font, boxShadow:"0 4px 20px rgba(210,163,73,0.5)", marginTop:4 }}>
-            Sign In →
+              fontWeight:800, fontSize:15, fontFamily:font, boxShadow:"0 4px 20px rgba(210,163,73,0.5)",
+              marginTop:4, opacity:loading?0.7:1 }}>
+            {loading ? "Signing in…" : "Sign In →"}
           </button>
         </div>
 
         <div style={{ textAlign:"center", color:"#475569", fontSize:11, marginTop:20 }}>
-          St. Stephen's School · Prototype Demo · March 2026
+          St. Stephen's School · Pathshala Portal
         </div>
       </div>
     </div>
@@ -610,7 +606,386 @@ function ParentEvents({ events }) {
 
 // ─── TEACHER / ADMIN SCREENS ─────────────────────────────────────────────────
 
-function AdminPanel({ students, setStudents, housePoints, setHousePoints, events, setEvents }) {
+// ─── ATTENDANCE TAB (Stage 4) ────────────────────────────────────────────────
+
+const STATUS_OPTIONS = ["Present","Absent","Late","Half Day","Leave"];
+const STATUS_COLOR = {
+  "Present":  "#38A169",
+  "Absent":   "#E53E3E",
+  "Late":     "#D69E2E",
+  "Half Day": "#3182CE",
+  "Leave":    "#94a3b8",
+};
+
+function AttendanceTab({ assignment, role, showToast, leaveGuardRef }) {
+  const todayISO = () => {
+    const d = new Date();
+    const m = String(d.getMonth()+1).padStart(2,"0");
+    const day = String(d.getDate()).padStart(2,"0");
+    return d.getFullYear() + "-" + m + "-" + day;
+  };
+  const dayOfWeek      = (iso) => new Date(iso + "T00:00:00").getDay();
+  const isSundayDate   = (iso) => dayOfWeek(iso) === 0;
+  const isSaturdayDate = (iso) => dayOfWeek(iso) === 6;
+  const getMaxPeriod   = (iso) => isSaturdayDate(iso) ? 4 : 7;
+  const getStatusColor = (s)   => STATUS_COLOR[s] || STATUS_COLOR["Present"];
+  const compareAttendanceMaps = (a, b) => {
+    const ka = Object.keys(a), kb = Object.keys(b);
+    if (ka.length !== kb.length) return false;
+    for (const k of ka) if (a[k] !== b[k]) return false;
+    return true;
+  };
+  const buildUpsertPayload = (rosterArr, map, date, period, ta) =>
+    rosterArr.map(s => ({
+      student_id:    s.student_id,
+      date:          date,
+      period_number: period,
+      status:        map[s.student_id] || "Present",
+      class:         ta.class,
+      section:       ta.section,
+      marked_by:     ta.markedByEntityId,
+    }));
+
+  const [selectedDate,          setSelectedDate]          = useState(todayISO());
+  const [selectedPeriod,        setSelectedPeriod]        = useState(1);
+  const [roster,                setRoster]                = useState([]);
+  const [attendanceMap,         setAttendanceMap]         = useState({});
+  const [originalAttendanceMap, setOriginalAttendanceMap] = useState({});
+  const [loadingState,          setLoadingState]          = useState("idle");
+  const [errorMessage,          setErrorMessage]          = useState(null);
+  const [teacherAssignment,     setTeacherAssignment]     = useState(null);
+  const [pendingSwitch,         setPendingSwitch]         = useState(null);
+  const [dbHasRows,             setDbHasRows]             = useState(false);
+
+  const hasUnsavedChanges = !compareAttendanceMaps(attendanceMap, originalAttendanceMap);
+  const sunday            = isSundayDate(selectedDate);
+  const maxPeriodForDay   = getMaxPeriod(selectedDate);
+  const saveButtonEnabled = hasUnsavedChanges && loadingState !== "saving";
+
+  // Mount: resolve teacher entity_id + load roster
+  useEffect(() => {
+    let cancelled = false;
+    if (role === "Principal") {
+      setErrorMessage("Principal-wide attendance view ships in a later stage. Stage 4 currently scopes to a class teacher's class.");
+      return;
+    }
+    if (!assignment || !assignment.class || !assignment.section) {
+      setErrorMessage("Your class assignment is incomplete. Contact admin.");
+      return;
+    }
+    (async () => {
+      setLoadingState("loading-roster");
+      setErrorMessage(null);
+
+      const { data: { session } } = await db.auth.getSession();
+      if (cancelled) return;
+      if (!session) return;
+
+      const { data: ent, error: entErr } = await db
+        .from("entities")
+        .select("id")
+        .eq("metadata->>auth_user_id", session.user.id)
+        .single();
+      if (cancelled) return;
+      if (entErr || !ent) {
+        setErrorMessage("Could not identify your teacher record. Contact admin.");
+        setLoadingState("idle");
+        return;
+      }
+      const ta = { class: assignment.class, section: assignment.section, markedByEntityId: ent.id };
+      setTeacherAssignment(ta);
+
+      const { data, error } = await db
+        .from("student_profiles")
+        .select("entity_id, entities!student_profiles_entity_id_fkey(first_name, last_name)")
+        .eq("class", ta.class)
+        .eq("section", ta.section)
+        .order("first_name", { foreignTable: "entities" });
+      if (cancelled) return;
+      if (error) {
+        setErrorMessage("Could not load class roster — try again.");
+        setLoadingState("idle");
+        return;
+      }
+      const flat = (data || []).map(r => ({
+        student_id: r.entity_id,
+        first_name: r.entities.first_name,
+        last_name:  r.entities.last_name,
+      }));
+      setRoster(flat);
+      setLoadingState("idle");
+    })().catch(e => {
+      console.error("AttendanceTab mount error:", e);
+      if (!cancelled) {
+        setErrorMessage("Could not load attendance — try again.");
+        setLoadingState("idle");
+      }
+    });
+    return () => { cancelled = true; };
+  }, [assignment, role]);
+
+  // Load attendance on date/period/roster change
+  useEffect(() => {
+    if (!teacherAssignment || roster.length === 0) return;
+    if (sunday) return;
+
+    let cancelled = false;
+    (async () => {
+      setLoadingState("loading-attendance");
+      const { data, error } = await db
+        .from("attendance")
+        .select("student_id, status")
+        .eq("class",         teacherAssignment.class)
+        .eq("section",       teacherAssignment.section)
+        .eq("date",          selectedDate)
+        .eq("period_number", selectedPeriod);
+      if (cancelled) return;
+      if (error) {
+        setErrorMessage("Could not load attendance — try again.");
+        setLoadingState("idle");
+        return;
+      }
+      const next = {};
+      for (const s of roster) next[s.student_id] = "Present";
+      const valid = new Set(STATUS_OPTIONS);
+      for (const row of (data || [])) {
+        if (!(row.student_id in next)) continue;
+        if (!valid.has(row.status)) {
+          console.warn("Unknown attendance status:", row.status);
+          next[row.student_id] = "Present";
+        } else {
+          next[row.student_id] = row.status;
+        }
+      }
+      setAttendanceMap(next);
+      setOriginalAttendanceMap(next);
+      setDbHasRows((data || []).length > 0);
+      setErrorMessage(null);
+      setLoadingState("idle");
+    })().catch(e => {
+      console.error("AttendanceTab load error:", e);
+      if (!cancelled) {
+        setErrorMessage("Could not load attendance — try again.");
+        setLoadingState("idle");
+      }
+    });
+    return () => { cancelled = true; };
+  }, [teacherAssignment, roster, selectedDate, selectedPeriod, sunday]);
+
+  // Register sub-tab leave guard
+  useEffect(() => {
+    if (!leaveGuardRef) return;
+    leaveGuardRef.current = (commit) => {
+      if (hasUnsavedChanges) setPendingSwitch({ type: "external", commit: commit });
+      else commit();
+    };
+    return () => { if (leaveGuardRef) leaveGuardRef.current = null; };
+  }, [hasUnsavedChanges, leaveGuardRef]);
+
+  const setStatus = (studentId, status) => {
+    setAttendanceMap(p => ({ ...p, [studentId]: status }));
+  };
+
+  const applyDateChange = (newDate) => {
+    setSelectedDate(newDate);
+    if (isSaturdayDate(newDate) && selectedPeriod > 4) setSelectedPeriod(1);
+  };
+
+  const requestDateChange = (newDate) => {
+    if (newDate === selectedDate) return;
+    if (hasUnsavedChanges) setPendingSwitch({ type: "date", value: newDate });
+    else applyDateChange(newDate);
+  };
+
+  const requestPeriodChange = (newPeriod) => {
+    if (newPeriod === selectedPeriod) return;
+    if (hasUnsavedChanges) setPendingSwitch({ type: "period", value: newPeriod });
+    else setSelectedPeriod(newPeriod);
+  };
+
+  const cancelLeave = () => setPendingSwitch(null);
+
+  const discardLeave = () => {
+    if (!pendingSwitch) return;
+    setAttendanceMap(originalAttendanceMap);
+    if (pendingSwitch.type === "date")          applyDateChange(pendingSwitch.value);
+    else if (pendingSwitch.type === "period")   setSelectedPeriod(pendingSwitch.value);
+    else if (pendingSwitch.type === "external") pendingSwitch.commit();
+    setPendingSwitch(null);
+  };
+
+  const onSave = async () => {
+    if (!teacherAssignment || roster.length === 0) return;
+    setLoadingState("saving");
+    setErrorMessage(null);
+    const payload = buildUpsertPayload(roster, attendanceMap, selectedDate, selectedPeriod, teacherAssignment);
+    const { error } = await db
+      .from("attendance")
+      .upsert(payload, { onConflict: "student_id,date,period_number" });
+    if (error) {
+      console.error("Attendance save error:", error);
+      const isRls = error.code === "42501" || /row-level security|permission denied/i.test(error.message || "");
+      setErrorMessage(isRls
+        ? "You may no longer be assigned to this class. Refresh and contact admin."
+        : "Save failed — please refresh and try again.");
+      setLoadingState("idle");
+      return;
+    }
+    setOriginalAttendanceMap(attendanceMap);
+    setDbHasRows(true);
+    setLoadingState("idle");
+    if (showToast) showToast("Attendance saved");
+  };
+
+  const banner = (() => {
+    if (loadingState === "loading-roster" || loadingState === "loading-attendance") return "Loading…";
+    if (sunday) return null;
+    if (roster.length === 0) return null;
+    return dbHasRows ? "Saved attendance loaded" : "New entry — defaults to Present";
+  })();
+
+  const periodOpts = [];
+  for (let i = 1; i <= maxPeriodForDay; i++) periodOpts.push({ value: i, label: "Period " + i });
+
+  if (errorMessage && roster.length === 0 && !teacherAssignment) {
+    return (
+      <Card>
+        <Ttl>📅 Attendance</Ttl>
+        <div style={{ background:"#fff7ed", border:"1px solid #fdba74", color:"#9a3412",
+          borderRadius:10, padding:"12px 14px", fontSize:13, fontWeight:600, fontFamily:font }}>
+          ⚠️ {errorMessage}
+        </div>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <Ttl>📅 Attendance</Ttl>
+
+      <div style={{ display:"flex", gap:10, marginBottom:10 }}>
+        <div style={{ flex:1 }}>
+          <label style={{ fontSize:11, fontWeight:700, color:"#64748b", fontFamily:font, textTransform:"uppercase", letterSpacing:0.5 }}>Date</label>
+          <input type="date" value={selectedDate}
+            onChange={e => requestDateChange(e.target.value)}
+            style={{ marginTop:4, width:"100%", boxSizing:"border-box", padding:"11px 12px",
+              borderRadius:10, border:"1.5px solid #e2e8f0", fontSize:13, fontFamily:font,
+              outline:"none", color:"#1e293b", background:"#f8fafc" }} />
+        </div>
+        {!sunday && (
+          <div style={{ flex:1 }}>
+            <Sel label="Period" value={selectedPeriod}
+              onChange={e => requestPeriodChange(Number(e.target.value))}
+              options={periodOpts} />
+          </div>
+        )}
+      </div>
+
+      {sunday && (
+        <div style={{ background:"#f1f5f9", borderRadius:10, padding:"14px 16px",
+          color:"#475569", fontSize:13, fontWeight:600, textAlign:"center", fontFamily:font }}>
+          🌅 No school on Sunday — pick another date.
+        </div>
+      )}
+
+      {!sunday && banner && (
+        <div style={{ fontSize:11, fontWeight:700, color:"#64748b", marginBottom:10,
+          textTransform:"uppercase", letterSpacing:0.5, fontFamily:font }}>{banner}</div>
+      )}
+
+      {!sunday && errorMessage && (
+        <div style={{ background:"#fef2f2", border:"1px solid #fca5a5", color:"#991b1b",
+          borderRadius:10, padding:"10px 14px", fontSize:12, fontWeight:600, marginBottom:10, fontFamily:font }}>
+          ⚠️ {errorMessage}
+        </div>
+      )}
+
+      {!sunday && loadingState === "idle" && teacherAssignment && roster.length === 0 && !errorMessage && (
+        <div style={{ background:"#f1f5f9", borderRadius:10, padding:"14px 16px",
+          color:"#475569", fontSize:13, fontWeight:600, textAlign:"center", fontFamily:font }}>
+          No students assigned to your class. Please contact admin.
+        </div>
+      )}
+
+      {!sunday && roster.length > 0 && (
+        <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+          {roster.map(s => {
+            const cur = attendanceMap[s.student_id] || "Present";
+            return (
+              <div key={s.student_id} style={{ background:"#f8fafc", borderRadius:10, padding:"10px 12px" }}>
+                <div style={{ fontSize:13, fontWeight:700, color:"#1e293b", marginBottom:8, fontFamily:font }}>
+                  {s.first_name} {s.last_name}
+                </div>
+                <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                  {STATUS_OPTIONS.map(opt => {
+                    const selected = cur === opt;
+                    const color = getStatusColor(opt);
+                    return (
+                      <button key={opt} onClick={() => setStatus(s.student_id, opt)}
+                        style={{ flex:"1 1 0", minWidth:64, padding:"7px 4px", borderRadius:8,
+                          border: selected ? ("1.5px solid " + color) : "1.5px solid #e2e8f0",
+                          background: selected ? color : "white",
+                          color: selected ? "white" : "#475569",
+                          fontWeight:700, fontSize:11, fontFamily:font, cursor:"pointer" }}>
+                        {opt}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {!sunday && roster.length > 0 && (
+        <div style={{ display:"flex", alignItems:"center", gap:10, marginTop:14 }}>
+          {hasUnsavedChanges && (
+            <div title="Unsaved changes" style={{ width:10, height:10, borderRadius:"50%", background:"#f59e0b" }} />
+          )}
+          <div style={{ flex:1 }}>
+            <button onClick={onSave} disabled={!saveButtonEnabled}
+              style={{ width:"100%", padding:"12px", borderRadius:12, border:"none",
+                cursor: saveButtonEnabled ? "pointer" : "not-allowed",
+                background: saveButtonEnabled ? "#38A169" : "#cbd5e1",
+                color:"white", fontWeight:800, fontSize:14, fontFamily:font }}>
+              {loadingState === "saving" ? "Saving…" : "Save Attendance ✓"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {pendingSwitch && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(15,23,42,0.55)",
+          display:"flex", alignItems:"center", justifyContent:"center", zIndex:200, padding:24 }}>
+          <div style={{ background:"white", borderRadius:14, padding:20, maxWidth:340, width:"100%",
+            boxShadow:"0 12px 40px rgba(0,0,0,0.3)", fontFamily:font }}>
+            <div style={{ fontSize:15, fontWeight:800, color:"#1e293b", marginBottom:8 }}>
+              Unsaved changes
+            </div>
+            <div style={{ fontSize:13, color:"#64748b", marginBottom:16, lineHeight:1.5 }}>
+              You have unsaved attendance edits. Switch anyway?
+            </div>
+            <div style={{ display:"flex", gap:8 }}>
+              <button onClick={cancelLeave}
+                style={{ flex:1, padding:"10px", borderRadius:10, border:"1.5px solid #e2e8f0",
+                  background:"white", color:"#475569", fontWeight:700, fontSize:13, fontFamily:font, cursor:"pointer" }}>
+                Cancel
+              </button>
+              <button onClick={discardLeave}
+                style={{ flex:1, padding:"10px", borderRadius:10, border:"none",
+                  background:"#E53E3E", color:"white", fontWeight:700, fontSize:13, fontFamily:font, cursor:"pointer" }}>
+                Discard
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function AdminPanel({ students, setStudents, housePoints, setHousePoints, events, setEvents, assignment }) {
   const [tab, setTab]     = useState("marks");
   const [toast, setToast] = useState("");
 
@@ -622,11 +997,16 @@ function AdminPanel({ students, setStudents, housePoints, setHousePoints, events
   const loadStudent = (id) => { const s=students.find(x=>x.id===Number(id)); setSelId(Number(id)); setMarks({...s.academics}); };
   const saveMark = () => { setStudents(p=>p.map(s=>s.id===selId?{...s,academics:{...marks}}:s)); showToast("Marks saved!"); };
 
-  // Attendance
-  const [attId, setAttId]   = useState(students[0].id);
-  const [attVal, setAttVal] = useState(students[0].attendance);
-  const loadAtt = (id) => { setAttId(Number(id)); setAttVal(students.find(x=>x.id===Number(id))?.attendance||0); };
-  const saveAtt = () => { setStudents(p=>p.map(s=>s.id===attId?{...s,attendance:Number(attVal)}:s)); showToast("Attendance updated!"); };
+  // Attendance — Stage 4: live wiring lives in <AttendanceTab />.
+  // Sub-tab leave guard: AttendanceTab registers a callback here so unsaved
+  // edits trigger a confirm dialog before tab switches.
+  const leaveGuardRef = useRef(null);
+  const requestTabChange = (newTabId) => {
+    if (newTabId === tab) return;
+    const guard = leaveGuardRef.current;
+    if (tab === "attend" && guard) guard(() => setTab(newTabId));
+    else setTab(newTabId);
+  };
 
   // House points
   const [houseAdd, setHouseAdd] = useState({Red:0,Blue:0,Green:0,Yellow:0});
@@ -662,7 +1042,6 @@ function AdminPanel({ students, setStudents, housePoints, setHousePoints, events
   ];
 
   const curStudent  = students.find(s=>s.id===selId)||students[0];
-  const attStudent  = students.find(s=>s.id===attId)||students[0];
   const ptStudent   = students.find(s=>s.id===Number(ptId))||students[0];
   const studentOpts = students.map(s=>({value:s.id,label:`${s.name} (${s.class})`}));
   const medals      = ["🥇","🥈","🥉","🏅"];
@@ -697,7 +1076,7 @@ function AdminPanel({ students, setStudents, housePoints, setHousePoints, events
       {/* Sub-tabs */}
       <div style={{ display:"flex", gap:6, overflowX:"auto", paddingBottom:2 }}>
         {adminTabs.map(t=>(
-          <button key={t.id} onClick={()=>setTab(t.id)} style={{ padding:"8px 12px", borderRadius:20, border:"none",
+          <button key={t.id} onClick={()=>requestTabChange(t.id)} style={{ padding:"8px 12px", borderRadius:20, border:"none",
             cursor:"pointer", whiteSpace:"nowrap", background:tab===t.id?"#1a1a2e":"#f1f5f9",
             color:tab===t.id?"white":"#64748b", fontWeight:700, fontSize:11, fontFamily:font }}>
             {t.icon} {t.label}
@@ -734,25 +1113,13 @@ function AdminPanel({ students, setStudents, housePoints, setHousePoints, events
         </Card>
       )}
 
-      {/* ATTENDANCE */}
+      {/* ATTENDANCE — Stage 4 live wiring */}
       {tab==="attend" && (
-        <Card>
-          <Ttl>📅 Update Attendance</Ttl>
-          <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
-            <Sel label="Select Student" value={attId} onChange={e=>loadAtt(e.target.value)} options={studentOpts} />
-            <div style={{ background:"#f8fafc", borderRadius:12, padding:12 }}>
-              <div style={{ fontSize:12, fontWeight:700, color:"#64748b", marginBottom:4 }}>{attStudent.name}</div>
-              <div style={{ fontSize:11, color:"#94a3b8", marginBottom:12 }}>Current: {attStudent.attendance}%</div>
-              <Inp label="New Attendance %" type="number" value={attVal} onChange={e=>setAttVal(e.target.value)} placeholder="0–100" />
-              <div style={{ marginTop:10, background:"#f1f5f9", borderRadius:8, height:12, overflow:"hidden" }}>
-                <div style={{ height:"100%", width:`${Math.min(attVal,100)}%`,
-                  background:attVal>=90?"#38A169":attVal>=75?"#D69E2E":"#E53E3E", borderRadius:8, transition:"width 0.4s" }} />
-              </div>
-              <div style={{ fontSize:13, fontWeight:800, color:attVal>=90?"#38A169":attVal>=75?"#D69E2E":"#E53E3E", marginTop:6, textAlign:"right" }}>{attVal}%</div>
-            </div>
-            <Btn onClick={saveAtt}>Update Attendance ✓</Btn>
-          </div>
-        </Card>
+        <AttendanceTab
+          assignment={assignment}
+          role={assignment ? "Teacher" : "Principal"}
+          showToast={showToast}
+          leaveGuardRef={leaveGuardRef} />
       )}
 
       {/* HOUSE POINTS */}
@@ -1942,64 +2309,162 @@ function AiTutorModal({messages,input,setInput,onSend,loading,onClose}){
 
 function App() {
   const [screen, setScreen]           = useState("login");
-  const [role, setRole]               = useState("student");
+  const [role, setRole]               = useState("Student");
+  const [assignment, setAssignment]   = useState(null);
   const [activeTab, setActiveTab]     = useState("home");
   const [students, setStudents]       = useState(INITIAL_STUDENTS);
   const [housePoints, setHousePoints] = useState(INITIAL_HOUSE_POINTS);
   const [events, setEvents]           = useState(INITIAL_EVENTS);
+  const [sessionLoading, setSessionLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function restoreFromSession(session) {
+      if (!session) return null;
+      const userId = session.user.id;
+      const { data: roleRaw, error: roleErr } = await db.rpc('get_user_role');
+      if (roleErr) return null;
+      if (!roleRaw) return null;
+      let assignment = null;
+      if (roleRaw === 'Teacher') {
+        const { data: asgn, error: asgnErr } = await db
+          .from('teacher_assignments')
+          .select('class, section, role')
+          .eq('auth_user_id', userId)
+          .eq('is_active', true)
+          .single();
+        if (asgnErr) return null;
+        if (!asgn) return null;
+        assignment = asgn;
+      }
+      return { role: roleRaw, assignment };
+    }
+
+    // ── Initial session check ──────────────────────────────────────────
+    (async () => {
+      const { data: { session }, error: sessErr } = await db.auth.getSession();
+      if (cancelled) return;
+      if (sessErr || !session) { setSessionLoading(false); return; }
+      const restored = await restoreFromSession(session);
+      if (cancelled) return;
+      if (!restored) {
+        await db.auth.signOut();
+        setSessionLoading(false);
+        return;
+      }
+      setRole(restored.role);
+      setAssignment(restored.assignment);
+      setActiveTab("home");
+      setScreen("app");
+      setSessionLoading(false);
+    })();
+
+    // ── Cross-tab subscription ────────────────────────────────────────
+    const { data: { subscription } } = db.auth.onAuthStateChange((event, session) => {
+      if (cancelled) return;
+      if (event === 'SIGNED_OUT') {
+        setRole("Student");
+        setAssignment(null);
+        setScreen("login");
+        return;
+      }
+      if (event === 'SIGNED_IN') {
+        setTimeout(async () => {
+          if (cancelled) return;
+          const restored = await restoreFromSession(session);
+          if (cancelled) return;
+          if (!restored) { await db.auth.signOut(); return; }
+          setRole(restored.role);
+          setAssignment(restored.assignment);
+          setActiveTab("home");
+          setScreen("app");
+        }, 0);
+      }
+      // INITIAL_SESSION / TOKEN_REFRESHED / USER_UPDATED: no action.
+    });
+
+    // ── Cleanup ───────────────────────────────────────────────────────
+    return () => {
+      cancelled = true;
+      subscription.unsubscribe();
+    };
+  }, []);
 
   // Demo: student = Koppula Thanmaya Sri, parent = Muddam Shankar (has 2 kids: Divya & Manoj)
   const loggedParent = PARENTS[1];
 
-  const handleLogin = (r) => {
-    setRole(r);
+  const handleLogin = (role, assignment) => {
+    setRole(role);
+    setAssignment(assignment);
     setActiveTab("home");
     setScreen("app");
   };
 
+  const handleLogout = async () => {
+    await db.auth.signOut();
+    setRole("Student");
+    setAssignment(null);
+    setScreen("login");
+  };
+
   const tabConfig = {
-    student: [
+    Student: [
       {id:"home",   icon:"🏠", label:"Home"},
       {id:"houses", icon:"🏆", label:"Houses"},
       {id:"learn",  icon:"📖", label:"Study"},
       {id:"events", icon:"📅", label:"Events"},
     ],
-    parent: [
+    Parent: [
       {id:"home",   icon:"🏠", label:"My Child"},
       {id:"learn",  icon:"📖", label:"Study"},
       {id:"events", icon:"📅", label:"Events"},
     ],
-    teacher: [
+    Teacher: [
       {id:"home",   icon:"📋", label:"Admin"},
+    ],
+    // STAGE 2: Principal shares AdminPanel with Teacher (unscoped via
+    // assignment=null). Stage 4 will add a dedicated Principal view
+    // with school-wide dashboards.
+    Principal: [
+      {id:"home",   icon:"🏫", label:"Admin"},
     ],
   };
 
   const tabs = tabConfig[role];
 
   const roleLabels = {
-    student: "👤 Student View",
-    parent:  "👨‍👩‍👧 Parent View",
-    teacher: "🔐 Teacher Admin",
+    Student:   "👤 Student View",
+    Parent:    "👨‍👩‍👧 Parent View",
+    Teacher:   "🔐 Teacher Admin",
+    Principal: "🏫 Principal View",
   };
 
   const renderContent = () => {
-    if (role==="student") {
+    if (role==="Student") {
       if (activeTab==="home")   return <StudentHome students={students} />;
       if (activeTab==="houses") return <StudentHouses housePoints={housePoints} students={students} />;
       if (activeTab==="learn")  return <StudyScreen student={students[0]} />;
       if (activeTab==="events") return <StudentEvents events={events} />;
     }
-    if (role==="parent") {
+    if (role==="Parent") {
       if (activeTab==="home")   return <ParentHome parent={loggedParent} students={students} />;
       if (activeTab==="learn")  return <StudyScreen student={students[0]} />;
       if (activeTab==="events") return <ParentEvents events={events} />;
     }
-    if (role==="teacher") {
+    if (role==="Teacher" || role==="Principal") {
       return <AdminPanel students={students} setStudents={setStudents}
         housePoints={housePoints} setHousePoints={setHousePoints}
-        events={events} setEvents={setEvents} />;
+        events={events} setEvents={setEvents}
+        assignment={assignment} />;
     }
   };
+
+  if (sessionLoading) return (
+    <div style={{ minHeight:"100vh", background:"linear-gradient(160deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%)",
+      display:"flex", alignItems:"center", justifyContent:"center", color:"#94a3b8",
+      fontFamily:font, fontSize:14 }}>Loading…</div>
+  );
 
   if (screen==="login") return <LoginScreen onLogin={handleLogin} />;
 
@@ -2021,7 +2486,7 @@ function App() {
             <div key={h.emoji} style={{ width:8, height:8, borderRadius:"50%", background:h.color }} />
           ))}
         </div>
-        <button onClick={()=>setScreen("login")} style={{ padding:"6px 12px", borderRadius:20,
+        <button onClick={handleLogout} style={{ padding:"6px 12px", borderRadius:20,
           border:"1.5px solid #e2e8f0", background:"#f8fafc", color:"#64748b",
           fontWeight:700, fontSize:11, cursor:"pointer", fontFamily:font }}>Logout</button>
       </div>
