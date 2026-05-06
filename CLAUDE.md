@@ -107,6 +107,27 @@ These corrections apply across all remaining stages — record once, never debug
 
 - **`subjects` table seeded for Class 9 (2026-05-03).** 9 columns: subject_id, business_id, subject_name (NOT NULL), subject_code (NULLABLE), class, academic_year (default '2026-27'), is_active (default true), created_at, updated_at. 7 Class 9 rows seeded: Telugu, Hindi, English, Mathematics, Physical Science, Biological Science, Social Studies. subject_code intentionally NULL for all 7.
 
+## Schema architectural rules (added 2026-05-07)
+
+1. business_id type asymmetry: business_id is TEXT in biz_XXX schemas
+   (e.g., biz_001.attendance.business_id is text). business_id is UUID
+   in ae_platform tables (FK to ae_platform.businesses.id). When writing
+   cross-schema joins or RLS policies, do not assume same type.
+
+2. Role case convention: ae_platform.user_roles.role stores LOWERCASE
+   strings ('teacher', 'principal'). The get_user_role() function applies
+   INITCAP() and returns TITLE-CASE ('Teacher', 'Principal'). All RLS
+   policies compare against title-case values. Do not change one without
+   the other.
+
+3. auth_user_id resolution path: entities.metadata.auth_user_id is the
+   JS resolution mechanism for marked_by payloads. Full path:
+     auth.users
+       → ae_platform.user_roles.auth_user_id
+       → biz_001.teacher_assignments.auth_user_id (where wired)
+       → biz_001.entities.metadata.auth_user_id
+   Any one of these breaks and marked_by inserts fail silently.
+
 ## RLS role values
 Stored lowercase in ae_platform.user_roles ('principal', 'teacher', 'parent', 'student').
 get_user_role() returns title case via INITCAP(). Policies check against title case. INITCAP is the SINGLE translation layer — never toLowerCase() anywhere else.
@@ -128,18 +149,26 @@ get_user_role() returns title case via INITCAP(). Policies check against title c
 - agentedge_unified.html: separate repo decision pending; currently sits outside School_Portal.
 
 ## Pre-Wave-1 hardening backlog
-- Class normalisation audit across remaining tables (academic_calendar, attendance, marks, house_points, fee_structure, transport_routes, transport_stops, plus any other table with a `class` column)
-- AttendanceTab stale-closure audit — apply ref-based leave-guard pattern same as MarksTab fix
-- `teacher_subjects` full rebuild with real teacher-subject assignments from Stephen (current rows are partly orphaned; only Ramesh's row was repointed today)
-- Auth credential creation for TCH002–TCH009 (currently only Ramesh can log in; 8 of 9 teachers blocked)
-- Improve marks save error handling — currently shows misleading "no longer assigned to this class" for any RLS rejection; surface real DB error code/message instead
-- Disable already-used dates in make-up exam date picker (currently server-validated only via toast on conflict)
-- Constrain make-up date input to today or earlier (no `min`/`max` attributes today)
-- Improve shared `Sel` component to handle empty/falsy values (`o.value !== undefined ? o.value : o`)
-- `audit_log` trigger fix — use `NEW.business_id` instead of `OLD`
-- 9-or-10 column ALTER plan for `student_profiles` (deferred from Stage 5)
-- DELETE-on-parent discipline: audit FK-like references in dependent tables before destructive operations
-- Redundant auth restore on page refresh — on F5, `get_user_role` and `teacher_assignments` fire twice (once from the initial `getSession()` path, once from the `SIGNED_IN` event after `getSession()` resolves). ~100ms wasted round-trips. Not a ship-blocker. Fix with a guard flag or by relying on `onAuthStateChange` alone (dropping the explicit `getSession()` call).
+1. ✅ **CLOSED 2026-05-07:** Class normalisation audit across remaining tables (academic_calendar, attendance, marks, house_points, fee_structure, transport_routes, transport_stops, plus any other table with a `class` column). 39 rows updated across 3 tables (`biz_001.attendance` 29 rows, `biz_001.fee_structure` 4 rows, `biz_001.teacher_subjects` 6 rows).
+2. AttendanceTab stale-closure audit — apply ref-based leave-guard pattern same as MarksTab fix
+3. `teacher_subjects` full rebuild with real teacher-subject assignments from Stephen (current rows are partly orphaned; only Ramesh's row was repointed today)
+4. Auth credential creation for TCH002-TCH007 — 2 of 8 teachers (PRIN001 + TCH001-TCH007) have auth: Principal (PRIN001 / auth_user_id 55784bb1) + Class Teacher Ramesh (TCH001 / auth_user_id 2eb28e93). Subject teachers TCH002-TCH007 not yet wired.
+5. Improve marks save error handling — currently shows misleading "no longer assigned to this class" for any RLS rejection; surface real DB error code/message instead
+6. Disable already-used dates in make-up exam date picker (currently server-validated only via toast on conflict)
+7. Constrain make-up date input to today or earlier (no `min`/`max` attributes today)
+8. Improve shared `Sel` component to handle empty/falsy values (`o.value !== undefined ? o.value : o`)
+9. `audit_log` trigger fix — use `NEW.business_id` instead of `OLD`
+10. 9-or-10 column ALTER plan for `student_profiles` (deferred from Stage 5)
+11. DELETE-on-parent discipline: audit FK-like references in dependent tables before destructive operations
+12. Redundant auth restore on page refresh — on F5, `get_user_role` and `teacher_assignments` fire twice (once from the initial `getSession()` path, once from the `SIGNED_IN` event after `getSession()` resolves). ~100ms wasted round-trips. Not a ship-blocker. Fix with a guard flag or by relying on `onAuthStateChange` alone (dropping the explicit `getSession()` call).
+13. ✅ **CLOSED 2026-05-07:** Drop `biz_002.user_roles` — architectural drift cleaned; table dropped (was empty scaffolding).
+14. Investigate `agent_signals_all` naming pattern — determine whether it is a view, duplicate table, or architectural drift. Document the answer.
+15. Audit `biz_003` (Bhargavi Developers) and `biz_004` (Printing Press) schemas for `user_roles` drift similar to what was found in `biz_002`. Proactive cleanup before those verticals start.
+16. Investigate `teacher_profiles` asymmetry vs `student_profiles` — `student_profiles` exists, `teacher_profiles` does not. Decide whether to add `teacher_profiles` or remove `student_profiles` for symmetry.
+17. Email convention reconciliation — `auth.users` uses test pattern (e.g., `teacher1.test@agentedge.in`); `biz_001.entities` use real school emails. Defer execution until Stephen confirms domain.
+18. Confirm full body of `get_user_role()` function — visually verify the WHERE clause matches the role case convention documented in the Schema architectural rules section above.
+
+**Pre-Wave-1 backlog: 16 open + 2 closed = 18 items tracked (as of 2026-05-07).**
 
 ## Wave 2 / Stage 4 deferred UX backlog
 - **Principal read-only view:** Hide edit controls post-Stage 4 (currently functional via assignment=null path; refine UI affordances).
@@ -208,6 +237,9 @@ Never DELETE rows from a parent table without auditing FK-like references in dep
 
 ### Save-side error messages must surface real DB error code (learned 2026-05-06)
 Save-side error messages must surface real DB error code and message. Generic JS guesses obscure root cause; today's "no longer assigned to this class" hid an RLS 42501 rejection and cost ~2 hours of misdirected debugging.
+
+### Schema-sensitive facts get verified by query, not by build-log re-read (learned 2026-05-07)
+Schema-sensitive facts get verified by query, not by build-log re-read. Build log claims about schema state (table location, column type, row counts, FK relationships) cannot be trusted at face value. Always run an `information_schema` query against the live database before writing code that depends on schema facts. Two corrections were made on 2026-05-07 because of this — both cost 30+ minutes each.
 
 ## Architectural decisions (locked, do not re-litigate)
 
