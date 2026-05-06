@@ -104,7 +104,6 @@ const INITIAL_EVENTS = [
 
 const MONTHS    = ["Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec","Jan","Feb","Mar"];
 const ATT_TREND = [85,92,78,95,88,90,87,93,76,88,91,85];
-const SUBJECTS  = ["Math","Science","English","Social","Hindi","Telugu"];
 const font      = "'Nunito', sans-serif";
 
 // ─── Shared UI ──────────────────────────────────────────────────────────────
@@ -985,26 +984,900 @@ function AttendanceTab({ assignment, role, showToast, leaveGuardRef }) {
   );
 }
 
+// ─── MARKS TAB (Stage 5) ────────────────────────────────────────────────────
+
+const EXAM_TYPES = [
+  "Unit Test 1", "Unit Test 2", "Unit Test 3",
+  "Half Yearly", "Pre-Final", "Annual",
+  "Class Test", "Assignment"
+];
+
+function MarksTab({ assignment, role, showToast, leaveGuardRef }) {
+  const BUSINESS_ID   = "biz_001";
+  const CLASS         = "9";
+  const ACADEMIC_YEAR = "2026-27";
+
+  const todayISO = () => {
+    const d = new Date();
+    const m = String(d.getMonth()+1).padStart(2,"0");
+    const day = String(d.getDate()).padStart(2,"0");
+    return d.getFullYear() + "-" + m + "-" + day;
+  };
+
+  const buildEmptyRow = (r) => ({
+    studentId:        r.entity_id,
+    admissionNo:      r.admission_number || "",
+    name:             ((r.entity && r.entity.first_name) || "") + " " + ((r.entity && r.entity.last_name) || ""),
+    section:          r.section,
+    score:            "",
+    isAbsent:         false,
+    isDirty:          false,
+    originalScore:    "",
+    originalIsAbsent: false,
+  });
+
+  const [teacherEntityId,  setTeacherEntityId]  = useState(null);
+  const [subjectOptions,   setSubjectOptions]   = useState([]);
+  const [selectedSubject,  setSelectedSubject]  = useState("");
+  const [selectedExamType, setSelectedExamType] = useState("");
+  const [availableDates,   setAvailableDates]   = useState([]);
+  const [branch,           setBranch]           = useState(null);
+  const [examDate,         setExamDate]         = useState("");
+  const [maxMarks,         setMaxMarks]         = useState("");
+  const [roster,           setRoster]           = useState([]);
+  const [studentRows,      setStudentRows]      = useState([]);
+  const [loadingState,     setLoadingState]     = useState("idle");
+  const [errorMessage,     setErrorMessage]     = useState(null);
+  const [pendingNavigation,setPendingNavigation]= useState(null);
+  const [showMakeUpModal,  setShowMakeUpModal]  = useState(false);
+  const [makeUpDate,       setMakeUpDate]       = useState("");
+  const [makeUpRows,       setMakeUpRows]       = useState([]);
+  const [makeUpError,      setMakeUpError]      = useState(null);
+
+  const requestSeqRef     = useRef(0);
+  const latestAcceptedRef = useRef(0);
+  const dirtyCountRef     = useRef(0);
+
+  const dirtyCount = studentRows.filter(r => r.isDirty).length;
+  dirtyCountRef.current = dirtyCount;
+
+  const validation = (() => {
+    if (branch === "A" && (maxMarks === "" || Number(maxMarks) <= 0)) {
+      return { blockingError: "Enter max marks first", perRowErrors: new Map() };
+    }
+    const perRowErrors = new Map();
+    const maxN = Number(maxMarks);
+    for (const row of studentRows) {
+      if (!row.isDirty) continue;
+      if (row.isAbsent) continue;
+      const raw = row.score;
+      if (raw === "") {
+        perRowErrors.set(row.studentId, "Enter a score or mark Absent");
+        continue;
+      }
+      const n = Number(raw);
+      if (Number.isNaN(n))                  perRowErrors.set(row.studentId, "Must be a number");
+      else if (n < 0)                       perRowErrors.set(row.studentId, "Cannot be negative");
+      else if (maxN > 0 && n > maxN)        perRowErrors.set(row.studentId, "Cannot exceed " + maxN);
+    }
+    return { blockingError: null, perRowErrors: perRowErrors };
+  })();
+
+  const canSave = !validation.blockingError
+                  && validation.perRowErrors.size === 0
+                  && dirtyCount > 0
+                  && loadingState !== "saving";
+
+  // Mount: resolve teacher entity_id, load subjects, load roster
+  useEffect(() => {
+    let cancelled = false;
+    if (role === "Principal") {
+      setErrorMessage("Principal-wide marks view ships in a later stage. Stage 5 currently scopes to a class teacher.");
+      return;
+    }
+    if (!assignment || !assignment.class || !assignment.section) {
+      setErrorMessage("Your class assignment is incomplete. Contact admin.");
+      return;
+    }
+    (async () => {
+      setLoadingState("loading-subjects");
+      setErrorMessage(null);
+
+      const { data: { session } } = await db.auth.getSession();
+      if (cancelled) return;
+      if (!session) return;
+
+      const { data: ent, error: entErr } = await db
+        .from("entities")
+        .select("id")
+        .eq("metadata->>auth_user_id", session.user.id)
+        .single();
+      if (cancelled) return;
+      if (entErr || !ent) {
+        setErrorMessage("Could not identify your teacher record. Contact admin.");
+        setLoadingState("idle");
+        return;
+      }
+      setTeacherEntityId(ent.id);
+
+      const { data: subs, error: subErr } = await db
+        .from("subjects")
+        .select("subject_id, subject_name")
+        .eq("business_id",   BUSINESS_ID)
+        .eq("class",         CLASS)
+        .eq("academic_year", ACADEMIC_YEAR)
+        .eq("is_active",     true)
+        .order("subject_name");
+      if (cancelled) return;
+      if (subErr) {
+        setErrorMessage("Could not load subjects — try again.");
+        setLoadingState("idle");
+        return;
+      }
+      setSubjectOptions(subs || []);
+
+      const { data: rosterData, error: rosterErr } = await db
+        .from("student_profiles")
+        .select("id, entity_id, admission_number, section, entity:entities!student_profiles_entity_id_fkey(first_name, last_name)")
+        .eq("business_id", BUSINESS_ID)
+        .eq("class",       CLASS)
+        .order("admission_number");
+      if (cancelled) return;
+      if (rosterErr) {
+        setErrorMessage("Could not load class roster — try again.");
+        setLoadingState("idle");
+        return;
+      }
+      setRoster(rosterData || []);
+      setLoadingState("idle");
+    })().catch(e => {
+      console.error("MarksTab mount error:", e);
+      if (!cancelled) {
+        setErrorMessage("Could not load marks tab — try again.");
+        setLoadingState("idle");
+      }
+    });
+    return () => { cancelled = true; };
+  }, [assignment, role]);
+
+  // Q2: when both pickers set, look up available dates
+  useEffect(() => {
+    if (!selectedSubject || !selectedExamType) {
+      setBranch(null);
+      setAvailableDates([]);
+      setExamDate("");
+      setMaxMarks("");
+      setStudentRows([]);
+      return;
+    }
+    let cancelled = false;
+    const mySeq = ++requestSeqRef.current;
+    (async () => {
+      setLoadingState("loading-dates");
+      setErrorMessage(null);
+      const { data, error } = await db
+        .from("marks")
+        .select("exam_date")
+        .eq("business_id", BUSINESS_ID)
+        .eq("class",       CLASS)
+        .eq("subject_id",  selectedSubject)
+        .eq("exam_type",   selectedExamType);
+      if (cancelled) return;
+      if (mySeq < latestAcceptedRef.current) return;
+      if (error) {
+        setErrorMessage("Could not check existing dates — try again.");
+        setLoadingState("idle");
+        return;
+      }
+      latestAcceptedRef.current = mySeq;
+
+      const counts = new Map();
+      for (const row of (data || [])) {
+        counts.set(row.exam_date, (counts.get(row.exam_date) || 0) + 1);
+      }
+      const dates = [...counts.entries()].map(arr => ({ exam_date: arr[0], count: arr[1] }));
+      dates.sort((a, b) => a.exam_date.localeCompare(b.exam_date));
+      setAvailableDates(dates);
+
+      if (dates.length === 0) {
+        setBranch("A");
+        setExamDate(todayISO());
+        setMaxMarks("");
+      } else if (dates.length === 1) {
+        setBranch("B");
+        setExamDate(dates[0].exam_date);
+      } else {
+        setBranch("C");
+        setExamDate("");
+        setMaxMarks("");
+      }
+      setLoadingState("idle");
+    })().catch(e => {
+      console.error("MarksTab dates error:", e);
+      if (!cancelled) {
+        setErrorMessage("Could not check existing dates — try again.");
+        setLoadingState("idle");
+      }
+    });
+    return () => { cancelled = true; };
+  }, [selectedSubject, selectedExamType]);
+
+  // Branch A: initialise empty rows from roster
+  useEffect(() => {
+    if (branch !== "A" || roster.length === 0) return;
+    setStudentRows(roster.map(buildEmptyRow));
+  }, [branch, roster]);
+
+  // Branch B/C: load existing marks for examDate (Q3b) and merge with roster
+  useEffect(() => {
+    if (!(branch === "B" || branch === "C") || !examDate || roster.length === 0) return;
+    let cancelled = false;
+    const mySeq = ++requestSeqRef.current;
+    (async () => {
+      setLoadingState("loading-marks");
+      setErrorMessage(null);
+      const { data: existing, error } = await db
+        .from("marks")
+        .select("student_id, score, max_marks")
+        .eq("business_id", BUSINESS_ID)
+        .eq("class",       CLASS)
+        .eq("subject_id",  selectedSubject)
+        .eq("exam_type",   selectedExamType)
+        .eq("exam_date",   examDate);
+      if (cancelled) return;
+      if (mySeq < latestAcceptedRef.current) return;
+      if (error) {
+        setErrorMessage("Could not load existing marks — try again.");
+        setLoadingState("idle");
+        return;
+      }
+      latestAcceptedRef.current = mySeq;
+
+      const map = new Map();
+      for (const m of (existing || [])) map.set(m.student_id, m);
+      const rows = roster.map(r => {
+        const ex       = map.get(r.entity_id);
+        const score    = ex ? (ex.score === null ? "" : String(ex.score)) : "";
+        const isAbsent = ex ? (ex.score === null) : false;
+        return {
+          studentId:        r.entity_id,
+          admissionNo:      r.admission_number || "",
+          name:             ((r.entity && r.entity.first_name) || "") + " " + ((r.entity && r.entity.last_name) || ""),
+          section:          r.section,
+          score:            score,
+          isAbsent:         isAbsent,
+          isDirty:          false,
+          originalScore:    score,
+          originalIsAbsent: isAbsent,
+        };
+      });
+      setStudentRows(rows);
+      if (existing && existing.length > 0) {
+        setMaxMarks(String(existing[0].max_marks));
+      }
+      setLoadingState("idle");
+    })().catch(e => {
+      console.error("MarksTab marks load error:", e);
+      if (!cancelled) {
+        setErrorMessage("Could not load existing marks — try again.");
+        setLoadingState("idle");
+      }
+    });
+    return () => { cancelled = true; };
+  }, [branch, examDate, roster, selectedSubject, selectedExamType]);
+
+  // Register sub-tab leave guard
+  useEffect(() => {
+    if (!leaveGuardRef) return;
+    leaveGuardRef.current = (commit) => {
+      if (dirtyCountRef.current > 0) setPendingNavigation({ commit: commit });
+      else commit();
+    };
+    return () => { if (leaveGuardRef) leaveGuardRef.current = null; };
+  }, [leaveGuardRef]);
+
+  // beforeunload guard
+  useEffect(() => {
+    const handler = (e) => {
+      if (dirtyCount > 0) {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [dirtyCount]);
+
+  const requestInternalChange = (commitFn) => {
+    if (dirtyCount > 0) setPendingNavigation({ commit: commitFn });
+    else commitFn();
+  };
+
+  const onSubjectChange = (newId) => {
+    if (newId === selectedSubject) return;
+    requestInternalChange(() => { setSelectedSubject(newId); });
+  };
+
+  const onExamTypeChange = (newType) => {
+    if (newType === selectedExamType) return;
+    requestInternalChange(() => { setSelectedExamType(newType); });
+  };
+
+  const onDatePick = (newDate) => {
+    if (newDate === examDate) return;
+    requestInternalChange(() => { setExamDate(newDate); });
+  };
+
+  const onChangeDateClick = () => {
+    requestInternalChange(() => {
+      setExamDate("");
+      setStudentRows([]);
+      setMaxMarks("");
+    });
+  };
+
+  const onMaxMarksChange = (newMax) => { setMaxMarks(newMax); };
+
+  const onExamDateChange = (newDate) => { setExamDate(newDate); };
+
+  const onScoreChange = (studentId, newScore) => {
+    setStudentRows(prev => prev.map(r => {
+      if (r.studentId !== studentId) return r;
+      const isDirty = newScore !== r.originalScore || r.isAbsent !== r.originalIsAbsent;
+      return { ...r, score: newScore, isDirty: isDirty };
+    }));
+  };
+
+  const onAbsentToggle = (studentId) => {
+    setStudentRows(prev => prev.map(r => {
+      if (r.studentId !== studentId) return r;
+      const newAbsent = !r.isAbsent;
+      const newScore  = newAbsent ? "" : r.score;
+      const isDirty   = newScore !== r.originalScore || newAbsent !== r.originalIsAbsent;
+      return { ...r, isAbsent: newAbsent, score: newScore, isDirty: isDirty };
+    }));
+  };
+
+  const cancelLeave = () => setPendingNavigation(null);
+
+  const discardLeave = () => {
+    if (!pendingNavigation) return;
+    setStudentRows(prev => prev.map(r => ({
+      ...r,
+      score:    r.originalScore,
+      isAbsent: r.originalIsAbsent,
+      isDirty:  false,
+    })));
+    const commit = pendingNavigation.commit;
+    setPendingNavigation(null);
+    commit();
+  };
+
+  const onSave = async () => {
+    if (!canSave) return;
+    if (!teacherEntityId) {
+      setErrorMessage("Cannot identify your teacher record. Refresh and retry.");
+      return;
+    }
+    const dirtyRows = studentRows.filter(r => r.isDirty);
+    if (dirtyRows.length === 0) return;
+
+    const maxN = Number(maxMarks);
+    const payload = dirtyRows.map(r => ({
+      business_id:   BUSINESS_ID,
+      student_id:    r.studentId,
+      subject_id:    selectedSubject,
+      class:         CLASS,
+      section:       r.section,
+      exam_type:     selectedExamType,
+      exam_date:     examDate,
+      max_marks:     maxN,
+      score:         r.isAbsent ? null : Number(r.score),
+      marked_by:     teacherEntityId,
+      academic_year: ACADEMIC_YEAR,
+    }));
+
+    setLoadingState("saving");
+    setErrorMessage(null);
+
+    const { error } = await db
+      .from("marks")
+      .upsert(payload, { onConflict: "business_id,student_id,subject_id,exam_type,exam_date" });
+
+    if (error) {
+      console.error("Marks save error:", error);
+      const isRls = error.code === "42501" || /row-level security|permission denied/i.test(error.message || "");
+      setErrorMessage(isRls
+        ? "You may no longer be assigned to this class. Refresh and contact admin."
+        : "Save failed — please refresh and try again.");
+      setLoadingState("idle");
+      return;
+    }
+
+    setStudentRows(prev => prev.map(r => ({
+      ...r,
+      originalScore:    r.score,
+      originalIsAbsent: r.isAbsent,
+      isDirty:          false,
+    })));
+
+    if (branch === "A") {
+      setAvailableDates([{ exam_date: examDate, count: dirtyRows.length }]);
+      setBranch("B");
+    } else if (!availableDates.find(d => d.exam_date === examDate)) {
+      const updated = [...availableDates, { exam_date: examDate, count: dirtyRows.length }];
+      updated.sort((a, b) => a.exam_date.localeCompare(b.exam_date));
+      setAvailableDates(updated);
+      setBranch(updated.length >= 2 ? "C" : "B");
+    }
+
+    setLoadingState("idle");
+    if (showToast) showToast("Saved " + dirtyRows.length + " mark(s)");
+  };
+
+  const openMakeUpModal = () => {
+    requestInternalChange(() => {
+      const absentRows = studentRows
+        .filter(r => r.originalIsAbsent === true)
+        .map(r => ({
+          studentId:   r.studentId,
+          admissionNo: r.admissionNo,
+          name:        r.name,
+          section:     r.section,
+          score:       "",
+          isAbsent:    false,
+          isDirty:     false,
+        }));
+      if (absentRows.length === 0) {
+        if (showToast) showToast("No absent students to add a make-up for.");
+        return;
+      }
+      setMakeUpRows(absentRows);
+      setMakeUpDate("");
+      setMakeUpError(null);
+      setShowMakeUpModal(true);
+    });
+  };
+
+  const closeMakeUpModal = () => {
+    setShowMakeUpModal(false);
+    setMakeUpRows([]);
+    setMakeUpDate("");
+    setMakeUpError(null);
+  };
+
+  const onMakeUpScoreChange = (studentId, newScore) => {
+    setMakeUpRows(prev => prev.map(r => {
+      if (r.studentId !== studentId) return r;
+      return { ...r, score: newScore, isDirty: true };
+    }));
+  };
+
+  const onMakeUpAbsentToggle = (studentId) => {
+    setMakeUpRows(prev => prev.map(r => {
+      if (r.studentId !== studentId) return r;
+      const newAbsent = !r.isAbsent;
+      return { ...r, isAbsent: newAbsent, score: newAbsent ? "" : r.score, isDirty: true };
+    }));
+  };
+
+  const onMakeUpSave = async () => {
+    if (!teacherEntityId) {
+      setMakeUpError("Cannot identify your teacher record. Refresh and retry.");
+      return;
+    }
+    if (!makeUpDate) {
+      setMakeUpError("Pick a date for the make-up exam.");
+      return;
+    }
+    if (availableDates.find(d => d.exam_date === makeUpDate)) {
+      setMakeUpError("That date already has marks. Pick a different date.");
+      return;
+    }
+    const dirtyRows = makeUpRows.filter(r => r.isDirty);
+    if (dirtyRows.length === 0) {
+      setMakeUpError("No scores entered.");
+      return;
+    }
+    const maxN = Number(maxMarks);
+    if (!(maxN > 0)) {
+      setMakeUpError("Max marks not set.");
+      return;
+    }
+    for (const r of dirtyRows) {
+      if (r.isAbsent) continue;
+      const n = Number(r.score);
+      if (r.score === "" || Number.isNaN(n) || n < 0 || n > maxN) {
+        setMakeUpError("One or more scores are invalid.");
+        return;
+      }
+    }
+
+    const payload = dirtyRows.map(r => ({
+      business_id:   BUSINESS_ID,
+      student_id:    r.studentId,
+      subject_id:    selectedSubject,
+      class:         CLASS,
+      section:       r.section,
+      exam_type:     selectedExamType,
+      exam_date:     makeUpDate,
+      max_marks:     maxN,
+      score:         r.isAbsent ? null : Number(r.score),
+      marked_by:     teacherEntityId,
+      academic_year: ACADEMIC_YEAR,
+    }));
+
+    setLoadingState("saving");
+    setMakeUpError(null);
+
+    const { error } = await db
+      .from("marks")
+      .upsert(payload, { onConflict: "business_id,student_id,subject_id,exam_type,exam_date" });
+
+    if (error) {
+      console.error("Marks make-up save error:", error);
+      setMakeUpError("Save failed — please retry.");
+      setLoadingState("idle");
+      return;
+    }
+
+    const updated = [...availableDates, { exam_date: makeUpDate, count: dirtyRows.length }];
+    updated.sort((a, b) => a.exam_date.localeCompare(b.exam_date));
+    setAvailableDates(updated);
+    setBranch("C");
+
+    setLoadingState("idle");
+    setShowMakeUpModal(false);
+    setMakeUpRows([]);
+    setMakeUpDate("");
+    if (showToast) showToast("Make-up saved (" + dirtyRows.length + " student(s))");
+  };
+
+  const banner = (() => {
+    if (loadingState === "loading-subjects") return "Loading subjects…";
+    if (loadingState === "loading-dates")    return "Checking existing dates…";
+    if (loadingState === "loading-marks")    return "Loading existing marks…";
+    if (validation.blockingError)            return validation.blockingError;
+    if (!selectedSubject || !selectedExamType) return "Pick subject and exam type to begin";
+    if (branch === "C" && !examDate)         return "Multiple dates exist — pick one";
+    if (dirtyCount > 0)                      return dirtyCount + " unsaved change(s)";
+    if (branch === "B" || branch === "C")    return "Saved marks loaded";
+    if (branch === "A")                      return "New entry — enter max marks and scores";
+    return null;
+  })();
+
+  if (errorMessage && !teacherEntityId && roster.length === 0) {
+    return (
+      <Card>
+        <Ttl>📝 Marks</Ttl>
+        <div style={{ background:"#fff7ed", border:"1px solid #fdba74", color:"#9a3412",
+          borderRadius:10, padding:"12px 14px", fontSize:13, fontWeight:600, fontFamily:font }}>
+          ⚠️ {errorMessage}
+        </div>
+      </Card>
+    );
+  }
+
+  const maxCount = availableDates.reduce((m, d) => Math.max(m, d.count), 0);
+
+  const pickerLabelStyle = {
+    fontSize:11, fontWeight:700, color:"#64748b", fontFamily:font,
+    textTransform:"uppercase", letterSpacing:0.5
+  };
+  const pickerSelectStyle = {
+    padding:"11px 12px", borderRadius:10, border:"1.5px solid #e2e8f0",
+    fontSize:13, fontFamily:font, outline:"none", color:"#1e293b", background:"#f8fafc"
+  };
+
+  return (
+    <Card>
+      <Ttl>📝 Marks</Ttl>
+
+      <div style={{ display:"flex", flexDirection:"column", gap:10, marginBottom:10 }}>
+        <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
+          <label style={pickerLabelStyle}>Subject</label>
+          <select value={selectedSubject} onChange={e => onSubjectChange(e.target.value)} style={pickerSelectStyle}>
+            <option value="">— Pick subject —</option>
+            {subjectOptions.map(s => (
+              <option key={s.subject_id} value={s.subject_id}>{s.subject_name}</option>
+            ))}
+          </select>
+        </div>
+        <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
+          <label style={pickerLabelStyle}>Exam Type</label>
+          <select value={selectedExamType} onChange={e => onExamTypeChange(e.target.value)} style={pickerSelectStyle}>
+            <option value="">— Pick exam type —</option>
+            {EXAM_TYPES.map(t => (
+              <option key={t} value={t}>{t}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      {branch === "C" && !examDate && availableDates.length > 0 && (
+        <div style={{ background:"#f8fafc", borderRadius:10, padding:"10px 12px", marginBottom:10 }}>
+          <div style={{ fontSize:11, fontWeight:700, color:"#64748b", marginBottom:8,
+            textTransform:"uppercase", letterSpacing:0.5, fontFamily:font }}>
+            Pick a date
+          </div>
+          <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+            {availableDates.map(d => {
+              const isMakeUp = d.count < maxCount;
+              return (
+                <button key={d.exam_date} onClick={() => onDatePick(d.exam_date)}
+                  style={{ padding:"9px 12px", borderRadius:8, border:"1.5px solid #e2e8f0",
+                    background:"white", color:"#1e293b", fontWeight:700, fontSize:13,
+                    fontFamily:font, cursor:"pointer", textAlign:"left" }}>
+                  {d.exam_date} · {d.count} record(s){isMakeUp ? " — make-up" : ""}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {branch === "C" && examDate && (
+        <div style={{ marginBottom:10 }}>
+          <button onClick={onChangeDateClick}
+            style={{ background:"none", border:"none", color:"#3182CE", fontWeight:700,
+              fontSize:12, fontFamily:font, cursor:"pointer", padding:0 }}>
+            ← Change date
+          </button>
+        </div>
+      )}
+
+      {selectedSubject && selectedExamType && (branch === "A" || (examDate && (branch === "B" || branch === "C"))) && (
+        <div style={{ display:"flex", gap:10, marginBottom:10 }}>
+          <div style={{ flex:1 }}>
+            <label style={{ fontSize:11, fontWeight:700, color:"#64748b", fontFamily:font, textTransform:"uppercase", letterSpacing:0.5 }}>Max Marks</label>
+            <input type="number" min="1" value={maxMarks}
+              onChange={e => onMaxMarksChange(e.target.value)}
+              disabled={branch !== "A"}
+              style={{ marginTop:4, width:"100%", boxSizing:"border-box", padding:"11px 12px",
+                borderRadius:10, border:"1.5px solid #e2e8f0", fontSize:13, fontFamily:font,
+                outline:"none", color:"#1e293b",
+                background: branch !== "A" ? "#f1f5f9" : "#f8fafc" }} />
+          </div>
+          <div style={{ flex:1 }}>
+            <label style={{ fontSize:11, fontWeight:700, color:"#64748b", fontFamily:font, textTransform:"uppercase", letterSpacing:0.5 }}>Exam Date</label>
+            <input type="date" value={examDate}
+              onChange={e => onExamDateChange(e.target.value)}
+              disabled={branch !== "A"}
+              style={{ marginTop:4, width:"100%", boxSizing:"border-box", padding:"11px 12px",
+                borderRadius:10, border:"1.5px solid #e2e8f0", fontSize:13, fontFamily:font,
+                outline:"none", color:"#1e293b",
+                background: branch !== "A" ? "#f1f5f9" : "#f8fafc" }} />
+          </div>
+        </div>
+      )}
+
+      {banner && (
+        <div style={{ fontSize:11, fontWeight:700,
+          color: validation.blockingError ? "#9a3412" : "#64748b",
+          marginBottom:10, textTransform:"uppercase", letterSpacing:0.5, fontFamily:font,
+          background: validation.blockingError ? "#fff7ed" : "transparent",
+          border: validation.blockingError ? "1px solid #fdba74" : "none",
+          borderRadius: validation.blockingError ? 10 : 0,
+          padding: validation.blockingError ? "8px 12px" : 0 }}>
+          {validation.blockingError ? "⚠️ " : ""}{banner}
+        </div>
+      )}
+
+      {errorMessage && teacherEntityId && (
+        <div style={{ background:"#fef2f2", border:"1px solid #fca5a5", color:"#991b1b",
+          borderRadius:10, padding:"10px 14px", fontSize:12, fontWeight:600, marginBottom:10, fontFamily:font }}>
+          ⚠️ {errorMessage}
+        </div>
+      )}
+
+      {selectedSubject && selectedExamType && (branch === "A" || (examDate && (branch === "B" || branch === "C"))) && roster.length === 0 && loadingState === "idle" && !errorMessage && (
+        <div style={{ background:"#f1f5f9", borderRadius:10, padding:"14px 16px",
+          color:"#475569", fontSize:13, fontWeight:600, textAlign:"center", fontFamily:font }}>
+          No students found for Class 9. Contact admin.
+        </div>
+      )}
+
+      {studentRows.length > 0 && (
+        <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+          {studentRows.map(row => {
+            const rowError = validation.perRowErrors.get(row.studentId);
+            return (
+              <div key={row.studentId} style={{ background:"#f8fafc", borderRadius:10, padding:"10px 12px",
+                border: rowError ? "1.5px solid #E53E3E" : "1.5px solid transparent" }}>
+                <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
+                  <div style={{ fontSize:13, fontWeight:700, color:"#1e293b", fontFamily:font }}>
+                    {row.admissionNo ? row.admissionNo + " · " : ""}{row.name.trim() || "(unnamed)"}
+                  </div>
+                  {row.isDirty && (
+                    <div title="Unsaved" style={{ width:8, height:8, borderRadius:"50%", background:"#f59e0b" }} />
+                  )}
+                </div>
+                <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+                  <input type="number" placeholder="Score"
+                    value={row.score}
+                    disabled={row.isAbsent}
+                    onChange={e => onScoreChange(row.studentId, e.target.value)}
+                    title={rowError || ""}
+                    style={{ flex:1, padding:"9px 10px", borderRadius:8,
+                      border: rowError ? "1.5px solid #E53E3E" : "1.5px solid #e2e8f0",
+                      fontSize:14, fontFamily:font, textAlign:"center", fontWeight:700,
+                      color:"#1e293b", background: row.isAbsent ? "#f1f5f9" : "white" }} />
+                  <button onClick={() => onAbsentToggle(row.studentId)}
+                    style={{ padding:"8px 12px", borderRadius:8,
+                      border: row.isAbsent ? "1.5px solid #E53E3E" : "1.5px solid #e2e8f0",
+                      background: row.isAbsent ? "#E53E3E" : "white",
+                      color: row.isAbsent ? "white" : "#475569",
+                      fontWeight:700, fontSize:11, fontFamily:font, cursor:"pointer", whiteSpace:"nowrap" }}>
+                    Absent
+                  </button>
+                </div>
+                {rowError && (
+                  <div style={{ fontSize:11, color:"#E53E3E", fontWeight:700, marginTop:6, fontFamily:font }}>
+                    {rowError}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {(branch === "B" || branch === "C") && examDate && studentRows.length > 0 && (
+        <button onClick={openMakeUpModal}
+          style={{ marginTop:14, width:"100%", padding:"10px", borderRadius:10,
+            border:"1.5px dashed #94a3b8", background:"white", color:"#475569",
+            fontWeight:700, fontSize:12, fontFamily:font, cursor:"pointer" }}>
+          + Add make-up exam on a new date
+        </button>
+      )}
+
+      {studentRows.length > 0 && (
+        <div style={{ display:"flex", alignItems:"center", gap:10, marginTop:14 }}>
+          {dirtyCount > 0 && (
+            <div title="Unsaved changes" style={{ width:10, height:10, borderRadius:"50%", background:"#f59e0b" }} />
+          )}
+          <div style={{ flex:1 }}>
+            <button onClick={onSave} disabled={!canSave}
+              style={{ width:"100%", padding:"12px", borderRadius:12, border:"none",
+                cursor: canSave ? "pointer" : "not-allowed",
+                background: canSave ? "#38A169" : "#cbd5e1",
+                color:"white", fontWeight:800, fontSize:14, fontFamily:font }}>
+              {loadingState === "saving" ? "Saving…" : "Save Marks ✓"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {pendingNavigation && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(15,23,42,0.55)",
+          display:"flex", alignItems:"center", justifyContent:"center", zIndex:200, padding:24 }}>
+          <div style={{ background:"white", borderRadius:14, padding:20, maxWidth:340, width:"100%",
+            boxShadow:"0 12px 40px rgba(0,0,0,0.3)", fontFamily:font }}>
+            <div style={{ fontSize:15, fontWeight:800, color:"#1e293b", marginBottom:8 }}>
+              Unsaved changes
+            </div>
+            <div style={{ fontSize:13, color:"#64748b", marginBottom:16, lineHeight:1.5 }}>
+              You have unsaved marks. Discard?
+            </div>
+            <div style={{ display:"flex", gap:8 }}>
+              <button onClick={cancelLeave}
+                style={{ flex:1, padding:"10px", borderRadius:10, border:"1.5px solid #e2e8f0",
+                  background:"white", color:"#475569", fontWeight:700, fontSize:13, fontFamily:font, cursor:"pointer" }}>
+                Cancel
+              </button>
+              <button onClick={discardLeave}
+                style={{ flex:1, padding:"10px", borderRadius:10, border:"none",
+                  background:"#E53E3E", color:"white", fontWeight:700, fontSize:13, fontFamily:font, cursor:"pointer" }}>
+                Discard and switch
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showMakeUpModal && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(15,23,42,0.55)",
+          display:"flex", alignItems:"center", justifyContent:"center", zIndex:200, padding:16 }}>
+          <div style={{ background:"white", borderRadius:14, padding:20, maxWidth:480, width:"100%",
+            maxHeight:"85vh", overflowY:"auto",
+            boxShadow:"0 12px 40px rgba(0,0,0,0.3)", fontFamily:font }}>
+            <div style={{ fontSize:15, fontWeight:800, color:"#1e293b", marginBottom:8 }}>
+              Add make-up exam
+            </div>
+            <div style={{ fontSize:12, color:"#64748b", marginBottom:14 }}>
+              For students absent on the loaded exam date.
+            </div>
+
+            <div style={{ marginBottom:12 }}>
+              <label style={{ fontSize:11, fontWeight:700, color:"#64748b", fontFamily:font, textTransform:"uppercase", letterSpacing:0.5 }}>Make-up Date</label>
+              <input type="date" value={makeUpDate}
+                onChange={e => setMakeUpDate(e.target.value)}
+                style={{ marginTop:4, width:"100%", boxSizing:"border-box", padding:"10px 12px",
+                  borderRadius:10, border:"1.5px solid #e2e8f0", fontSize:13, fontFamily:font,
+                  outline:"none", color:"#1e293b", background:"#f8fafc" }} />
+            </div>
+
+            <div style={{ fontSize:12, color:"#475569", marginBottom:8 }}>
+              Max marks: <strong>{maxMarks || "—"}</strong>
+            </div>
+
+            {makeUpRows.length === 0 ? (
+              <div style={{ background:"#f1f5f9", borderRadius:10, padding:"12px", color:"#64748b",
+                fontSize:13, fontWeight:600, textAlign:"center" }}>
+                No absent students.
+              </div>
+            ) : (
+              <div style={{ display:"flex", flexDirection:"column", gap:8, marginBottom:12 }}>
+                {makeUpRows.map(row => (
+                  <div key={row.studentId} style={{ background:"#f8fafc", borderRadius:10, padding:"10px 12px" }}>
+                    <div style={{ fontSize:13, fontWeight:700, color:"#1e293b", marginBottom:8, fontFamily:font }}>
+                      {row.admissionNo ? row.admissionNo + " · " : ""}{row.name.trim() || "(unnamed)"}
+                    </div>
+                    <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+                      <input type="number" placeholder="Score" value={row.score}
+                        disabled={row.isAbsent}
+                        onChange={e => onMakeUpScoreChange(row.studentId, e.target.value)}
+                        style={{ flex:1, padding:"9px 10px", borderRadius:8,
+                          border:"1.5px solid #e2e8f0", fontSize:14, fontFamily:font,
+                          textAlign:"center", fontWeight:700, color:"#1e293b",
+                          background: row.isAbsent ? "#f1f5f9" : "white" }} />
+                      <button onClick={() => onMakeUpAbsentToggle(row.studentId)}
+                        style={{ padding:"8px 12px", borderRadius:8,
+                          border: row.isAbsent ? "1.5px solid #E53E3E" : "1.5px solid #e2e8f0",
+                          background: row.isAbsent ? "#E53E3E" : "white",
+                          color: row.isAbsent ? "white" : "#475569",
+                          fontWeight:700, fontSize:11, fontFamily:font, cursor:"pointer", whiteSpace:"nowrap" }}>
+                        Absent
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {makeUpError && (
+              <div style={{ background:"#fef2f2", border:"1px solid #fca5a5", color:"#991b1b",
+                borderRadius:10, padding:"8px 12px", fontSize:12, fontWeight:600, marginBottom:10, fontFamily:font }}>
+                ⚠️ {makeUpError}
+              </div>
+            )}
+
+            <div style={{ display:"flex", gap:8 }}>
+              <button onClick={closeMakeUpModal}
+                style={{ flex:1, padding:"10px", borderRadius:10, border:"1.5px solid #e2e8f0",
+                  background:"white", color:"#475569", fontWeight:700, fontSize:13, fontFamily:font, cursor:"pointer" }}>
+                Cancel
+              </button>
+              <button onClick={onMakeUpSave}
+                disabled={loadingState === "saving"}
+                style={{ flex:1, padding:"10px", borderRadius:10, border:"none",
+                  background: loadingState === "saving" ? "#cbd5e1" : "#38A169",
+                  color:"white", fontWeight:700, fontSize:13, fontFamily:font,
+                  cursor: loadingState === "saving" ? "not-allowed" : "pointer" }}>
+                {loadingState === "saving" ? "Saving…" : "Save Make-up"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+}
+
 function AdminPanel({ students, setStudents, housePoints, setHousePoints, events, setEvents, assignment }) {
   const [tab, setTab]     = useState("marks");
   const [toast, setToast] = useState("");
 
   const showToast = (msg) => { setToast(msg); setTimeout(()=>setToast(""),2500); };
 
-  // Marks
-  const [selId, setSelId]   = useState(students[0].id);
-  const [marks, setMarks]   = useState({...students[0].academics});
-  const loadStudent = (id) => { const s=students.find(x=>x.id===Number(id)); setSelId(Number(id)); setMarks({...s.academics}); };
-  const saveMark = () => { setStudents(p=>p.map(s=>s.id===selId?{...s,academics:{...marks}}:s)); showToast("Marks saved!"); };
-
-  // Attendance — Stage 4: live wiring lives in <AttendanceTab />.
-  // Sub-tab leave guard: AttendanceTab registers a callback here so unsaved
-  // edits trigger a confirm dialog before tab switches.
-  const leaveGuardRef = useRef(null);
+  // Sub-tab leave guards: AttendanceTab and MarksTab register callbacks here so
+  // unsaved edits trigger a confirm dialog before tab switches.
+  const leaveGuardRef      = useRef(null);
+  const marksLeaveGuardRef = useRef(null);
   const requestTabChange = (newTabId) => {
     if (newTabId === tab) return;
-    const guard = leaveGuardRef.current;
-    if (tab === "attend" && guard) guard(() => setTab(newTabId));
+    if (tab === "attend" && leaveGuardRef.current)           leaveGuardRef.current(() => setTab(newTabId));
+    else if (tab === "marks" && marksLeaveGuardRef.current)  marksLeaveGuardRef.current(() => setTab(newTabId));
     else setTab(newTabId);
   };
 
@@ -1041,7 +1914,6 @@ function AdminPanel({ students, setStudents, housePoints, setHousePoints, events
     {id:"events", icon:"🎯", label:"Events"},
   ];
 
-  const curStudent  = students.find(s=>s.id===selId)||students[0];
   const ptStudent   = students.find(s=>s.id===Number(ptId))||students[0];
   const studentOpts = students.map(s=>({value:s.id,label:`${s.name} (${s.class})`}));
   const medals      = ["🥇","🥈","🥉","🏅"];
@@ -1084,33 +1956,13 @@ function AdminPanel({ students, setStudents, housePoints, setHousePoints, events
         ))}
       </div>
 
-      {/* MARKS */}
+      {/* MARKS — Stage 5 live wiring */}
       {tab==="marks" && (
-        <Card>
-          <Ttl>📝 Enter / Update Marks</Ttl>
-          <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
-            <Sel label="Select Student" value={selId} onChange={e=>loadStudent(e.target.value)} options={studentOpts} />
-            <div style={{ background:"#f8fafc", borderRadius:12, padding:12 }}>
-              <div style={{ fontSize:12, fontWeight:700, color:"#64748b", marginBottom:10 }}>
-                {curStudent.name} · Class {curStudent.class} · {HOUSES[curStudent.house].emoji} {curStudent.house} House
-              </div>
-              {SUBJECTS.map(sub=>(
-                <div key={sub} style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}>
-                  <div style={{ width:60, fontSize:12, fontWeight:700, color:"#475569" }}>{sub}</div>
-                  <input type="number" min="0" max="100" value={marks[sub]||""}
-                    onChange={e=>setMarks(p=>({...p,[sub]:Number(e.target.value)}))}
-                    style={{ flex:1, padding:"9px 10px", borderRadius:8, border:"1.5px solid #e2e8f0",
-                      fontSize:15, fontFamily:font, textAlign:"center", fontWeight:800, color:"#1e293b", background:"white" }} />
-                  <div style={{ fontSize:11, fontWeight:800, width:28,
-                    color:(marks[sub]||0)>=90?"#38A169":(marks[sub]||0)>=75?"#3182CE":"#E53E3E" }}>
-                    {(marks[sub]||0)>=90?"A+":(marks[sub]||0)>=75?"B":"C"}
-                  </div>
-                </div>
-              ))}
-            </div>
-            <Btn onClick={saveMark}>Save Marks ✓</Btn>
-          </div>
-        </Card>
+        <MarksTab
+          assignment={assignment}
+          role={assignment ? "Teacher" : "Principal"}
+          showToast={showToast}
+          leaveGuardRef={marksLeaveGuardRef} />
       )}
 
       {/* ATTENDANCE — Stage 4 live wiring */}
