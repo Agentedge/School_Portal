@@ -1385,11 +1385,18 @@ function MarksTab({ assignment, role, showToast, leaveGuardRef }) {
       .upsert(payload, { onConflict: "business_id,student_id,subject_id,exam_type,exam_date" });
 
     if (error) {
-      console.error("Marks save error:", error);
+      // Pre-Wave-1 #4: capture full DB error context for debugging
+      console.error("[MarksTab] Primary save failed:", {
+        code: error.code,
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+      });
       const isRls = error.code === "42501" || /row-level security|permission denied/i.test(error.message || "");
+      const codeSuffix = error.code ? " (code: " + error.code + ")" : "";
       setErrorMessage(isRls
-        ? "You may no longer be assigned to this class. Refresh and contact admin."
-        : "Save failed — please refresh and try again.");
+        ? "Couldn't save — your access may have changed. Refresh and contact admin if this persists." + codeSuffix
+        : "Save failed — please refresh and try again." + codeSuffix);
       setLoadingState("idle");
       return;
     }
@@ -1515,8 +1522,18 @@ function MarksTab({ assignment, role, showToast, leaveGuardRef }) {
       .upsert(payload, { onConflict: "business_id,student_id,subject_id,exam_type,exam_date" });
 
     if (error) {
-      console.error("Marks make-up save error:", error);
-      setMakeUpError("Save failed — please retry.");
+      // Pre-Wave-1 #4: capture full DB error context for debugging
+      console.error("[MarksTab] Make-up save failed:", {
+        code: error.code,
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+      });
+      const isRls = error.code === "42501" || /row-level security|permission denied/i.test(error.message || "");
+      const codeSuffix = error.code ? " (code: " + error.code + ")" : "";
+      setMakeUpError(isRls
+        ? "Couldn't save — your access may have changed. Refresh and contact admin if this persists." + codeSuffix
+        : "Save failed — please retry." + codeSuffix);
       setLoadingState("idle");
       return;
     }
