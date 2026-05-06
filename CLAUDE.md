@@ -102,7 +102,7 @@ These corrections apply across all remaining stages — record once, never debug
   - **exam_type CHECK:** `('Unit Test 1','Unit Test 2','Unit Test 3','Half Yearly','Pre-Final','Annual','Class Test','Assignment')` — exact casing. NO 'Mid Term'.
   - **score CHECK:** `score >= 0`. Database does NOT enforce `score <= max_marks` — UI must.
   - **max_marks CHECK:** `max_marks > 0`.
-  - **Unique constraint:** `UNIQUE (student_id, subject_id, exam_type, exam_date)` — upsert key.
+  - **Unique constraint:** `marks_unique_per_student_per_exam` — 5-column: `(business_id, student_id, subject_id, exam_type, exam_date)` — upsert key.
   - **FKs:** student_id - biz_001.entities(id) ON DELETE CASCADE; subject_id - biz_001.subjects(subject_id); marked_by - biz_001.entities(id).
 
 - **`subjects` table seeded for Class 9 (2026-05-03).** 9 columns: subject_id, business_id, subject_name (NOT NULL), subject_code (NULLABLE), class, academic_year (default '2026-27'), is_active (default true), created_at, updated_at. 7 Class 9 rows seeded: Telugu, Hindi, English, Mathematics, Physical Science, Biological Science, Social Studies. subject_code intentionally NULL for all 7.
@@ -117,21 +117,29 @@ get_user_role() returns title case via INITCAP(). Policies check against title c
 - **Stage 2 (DONE, 2026-04-25):** LoginScreen rewired to `db.auth.signInWithPassword`. Role derived from `db.rpc('get_user_role')` (function lives in `biz_001`, not `ae_platform` as originally assumed — schema override is NOT needed). Teachers also query `teacher_assignments` for class/section scoping. All role strings are title-case throughout (INITCAP is the single translation layer — never toLowerCase()). Demo credentials + role-selector deleted.
 - **Stage 3 (DONE, 2026-04-26):** Session restore via `db.auth.getSession()` on App mount + `onAuthStateChange` subscription for cross-tab sign-out propagation. Deadlock fix applied (see Technical rules).
 - **Stage 4 (DONE, 2026-05-02):** AttendanceTab in `AdminPanel` rewired to `biz_001.attendance`. Period-level grid (Date + Period 1–7 weekdays / 1–4 Saturday / hidden Sunday). 5-status buttons (Present / Absent / Late / Half Day / Leave) — exact CHECK constraint casing. Upsert via `onConflict: 'student_id,date,period_number'`. Teacher sees own class/section via `assignment` prop; Principal sees all (read-only, no edit buttons). All 6 browser tests passed (T1–T6); 18 test rows live in DB; RLS verified. PR #1 merged to main. 7-field minimal upsert pattern locked. Leave-guard dialog ref-based pattern locked. Two schema corrections caught during T1 — see Schema Reality Notes (entities.auth_user_id, student_profiles dual FK).
-- **Stage 5 (IN PROGRESS, started 2026-05-03):** MarksTab wiring to `biz_001.marks`. Same pattern as AttendanceTab — teacher edits own class only, principal read-only.
-  - Subjects table seeded (7 Class 9 rows, 2026-05-03)
-  - Layout / flow / component plan locked through Parts A/B/C
-  - **Layout:** two-zone screen — Exam Context Bar on top (subject dropdown, exam_type dropdown, exam_date picker, max_marks input), Marks Workspace below (one row per student with score input + Absent checkbox)
-  - **Flow:** workspace appears only after all four context fields filled; one JOIN-style fetch returns students + existing marks together; inline UI validation only during typing (no DB calls); partial save on click of Save All (UI pre-validates aggressively, batch upsert is all-or-nothing)
-  - **Components:** MarksTab parent (state + DB), ExamContextBar (4 children), MarksWorkspace, StudentMarkRow with React.memo, ScoreInput, AbsentCheckbox, SaveAllButton, plus reused Stage 4 LeaveGuardDialog
-  - **Errors shown:** toast for count + inline red border per failed row
-  - **Ceiling:** 60 students per section with React.memo discipline (clean upgrade path to virtualisation later)
-  - Currently mid-stage at student_profiles audit (full 8-query audit per Process discipline rule). DROP attempt failed safely (RLS dependencies). Pivoted from DROP+CREATE to ALTER plan: add 9 missing columns to existing student_profiles, normalise class value 'Class 9' to '9', add CHECK + UNIQUE constraints, preserve 6 RLS policies and 8 test student rows.
+- **Stage 5 (DONE, 2026-05-06):** ✅ MarksTab in `AdminPanel` live-wired to `biz_001.marks`. Replaces previous mock UI (~860 lines added).
+  - Three branches: A (fresh entry, 0 dates) / B (silent load + edit, 1 date) / C (date picker with auto-detected `(make-up)` label on minority-row date, 2+ dates)
+  - Ref-based leave-guard pattern (`dirtyCountRef`) — fixes stale-closure on tab/picker changes. Same pattern still owed for AttendanceTab in pre-Wave-1.
+  - Save-only-dirty upsert; 5-priority validation precedence (range / max sanity / non-numeric / empty-not-Absent / pristine)
+  - Make-up modal auto-filters to students absent on the primary exam (UX refinement vs original spec)
+  - T1–T6 all PASSED. Merged via PR #2 → main commit `b883c74`.
 - **Stage 6 (NEXT after Stage 5):** Parent + Student views, read-only, faster than Stage 5 (~1–2 days). Parent-student linkage may need to be promoted to many-to-many table. Read-only on Parent dashboard means no save buttons, no edit grid; same `metadata->>auth_user_id` pattern for role resolution.
 - **Stage 7 (FUTURE):** AgentEdge Unified (agentedge_unified.html) wired to Supabase. 8 agents + Mitra. Separate Vercel project. ~3–5 days estimated; budget 6–8 days realistically. Needs 4 missing tables built first: `fees`, `admissions`, `staff_attendance`, `communication_logs`. Genuinely new territory — bring Web Claude back for planning. School owner Stephen logs into this dashboard, not the portal.
 - agentedge_unified.html: separate repo decision pending; currently sits outside School_Portal.
 
-## Stage 5 backlog
-- **Redundant restore on page refresh:** on F5, `get_user_role` and `teacher_assignments` fire twice — once from the initial `getSession()` path, once from the `SIGNED_IN` event that fires after `getSession()` resolves. Functionally identical, ~100ms of wasted round-trips. Not a ship-blocker. Fix during Stage 5 cleanup with a guard flag or by relying on `onAuthStateChange` alone (dropping the explicit `getSession()` call).
+## Pre-Wave-1 hardening backlog
+- Class normalisation audit across remaining tables (academic_calendar, attendance, marks, house_points, fee_structure, transport_routes, transport_stops, plus any other table with a `class` column)
+- AttendanceTab stale-closure audit — apply ref-based leave-guard pattern same as MarksTab fix
+- `teacher_subjects` full rebuild with real teacher-subject assignments from Stephen (current rows are partly orphaned; only Ramesh's row was repointed today)
+- Auth credential creation for TCH002–TCH009 (currently only Ramesh can log in; 8 of 9 teachers blocked)
+- Improve marks save error handling — currently shows misleading "no longer assigned to this class" for any RLS rejection; surface real DB error code/message instead
+- Disable already-used dates in make-up exam date picker (currently server-validated only via toast on conflict)
+- Constrain make-up date input to today or earlier (no `min`/`max` attributes today)
+- Improve shared `Sel` component to handle empty/falsy values (`o.value !== undefined ? o.value : o`)
+- `audit_log` trigger fix — use `NEW.business_id` instead of `OLD`
+- 9-or-10 column ALTER plan for `student_profiles` (deferred from Stage 5)
+- DELETE-on-parent discipline: audit FK-like references in dependent tables before destructive operations
+- Redundant auth restore on page refresh — on F5, `get_user_role` and `teacher_assignments` fire twice (once from the initial `getSession()` path, once from the `SIGNED_IN` event after `getSession()` resolves). ~100ms wasted round-trips. Not a ship-blocker. Fix with a guard flag or by relying on `onAuthStateChange` alone (dropping the explicit `getSession()` call).
 
 ## Wave 2 / Stage 4 deferred UX backlog
 - **Principal read-only view:** Hide edit controls post-Stage 4 (currently functional via assignment=null path; refine UI affordances).
@@ -151,18 +159,16 @@ get_user_role() returns title case via INITCAP(). Policies check against title c
 - **Pilot agreement with Stephen:** Sign once pricing locked.
 - **Real Class 9 student data collection from Stephen:** Excel template returned with sample rows only as of Apr 28; resend with hard deadline.
 
-## Path to June 1 go-live (30 days from 2026-05-02)
+## Path to June 1 go-live (26 days from 2026-05-06)
 
 | Window | Work |
 |---|---|
-| This weekend (May 3–4) | Stage 5 — Marks tab. Verify deployed schema first - plan in Web Claude - build in Claude Code on `stage-5-marks-tab` branch - T1–T6 - PR via `gh pr create --base main --fill` - merge - CLAUDE.md update + build log. ~4–6 hours. |
-| Week of May 5–11 | Stage 6 (Parent + Student views, ~1–2 days). Lock domain, Vercel/Netlify decision, pricing decision, pilot agreement with Stephen, May 10 data delivery. Start marketing site. Start CA firm coffee. |
-| Week of May 12–18 | Stage 7 (AgentEdge Unified). Build 4 missing tables (fees, admissions, staff_attendance, communication_logs) first. Wave 1 migration of Class 9 real data, gated by DPA. |
-| Week of May 19–25 | Wave 2 migration (KG–Class 8 + Class 10 = ~540 students) during summer vacation. Custom domain - production. Teacher training on-site. Parent WhatsApp manual wa.me links (API post-launch). |
-| Week of May 26–31 | Dress rehearsal — full school day simulated end-to-end with Stephen, mother, 2 teachers. Bug-fix mode only after this point. |
-| June 1 | GO-LIVE. |
+| This week (May 6–12) | Pre-Wave-1 hardening + non-technical critical path (lawyer call for DPA/Privacy Notice, Stephen call to lock May 10 data delivery, domain purchase, Supabase Pro decision) |
+| Week 2 (May 13–19) | Wave 1 migration if data is in + Stage 6 HomeworkTab build |
+| Week 3 (May 20–26) | UAT rounds 1 & 2 + teacher training + parent WhatsApp setup |
+| Week 4 (May 27–June 1) | Dress rehearsal + GO-LIVE June 1 |
 
-Sequence: Stage 5 - Stage 6 - DPA signed (legal gate) - Wave 1 - Stage 7 in parallel with Wave 2 - final prep - June 1.
+Sequence: Pre-Wave-1 hardening - DPA signed (legal gate) - Wave 1 migration - Stage 6 HomeworkTab - UAT - dress rehearsal - June 1.
 
 ## Working style (locked)
 - **Hand-holding mode (locked 2026-04-29):** One sub-step at a time. Plain English explanation BEFORE showing code. Line-by-line breakdown of code/SQL longer than 5 lines. Query deployed state before writing code that touches it. Call out trade-offs explicitly, invite pushback. Pause for confirmation on destructive actions (TRUNCATE, DROP) before running.
@@ -193,6 +199,15 @@ The 2026-05-03 incident: tried to DROP `student_profiles` to recreate it with ex
 
 ### Always view CLAUDE.md fresh from main before editing (learned 2026-05-03)
 When proposing edits to CLAUDE.md, always run `git checkout main && git pull && cat CLAUDE.md` first to see the actual current contents. Do NOT trust pasted content from a chat as authoritative — older sessions on feature branches may have stale copies. Lessons accumulate in CLAUDE.md across sessions, and editing from a stale base risks overwriting recent additions. The 2026-05-03 incident: started drafting CLAUDE.md edits based on a copy from the `stage-1-to-4-supabase-wiring` branch; pulling main brought down 133 lines of CLAUDE.md content from a separate session that hadn't been visible. Always pull main and `cat` first.
+
+### Class normalisation is a cross-cutting discipline (learned 2026-05-06)
+Class normalisation is a cross-cutting data-quality discipline. 4th occurrence today (`subjects`, `teacher_assignments`, `student_profiles`, `teacher_subjects`). Every table with a `class` column requires auditing.
+
+### Never DELETE without auditing FK-like references in dependent tables (learned 2026-05-06)
+Never DELETE rows from a parent table without auditing FK-like references in dependent tables first. Yesterday's `subjects` re-seed left orphaned `subject_id`s in `teacher_subjects`, which broke the RLS chain at marks INSERT today.
+
+### Save-side error messages must surface real DB error code (learned 2026-05-06)
+Save-side error messages must surface real DB error code and message. Generic JS guesses obscure root cause; today's "no longer assigned to this class" hid an RLS 42501 rejection and cost ~2 hours of misdirected debugging.
 
 ## Architectural decisions (locked, do not re-litigate)
 
@@ -301,26 +316,25 @@ When proposing edits to CLAUDE.md, always run `git checkout main && git pull && 
 
 **Decision:** Pivot from DROP + recreate to ALTER + extend. Preserve all 6 RLS policies, all 8 rows, all 3 downstream-table relationships. Plan: ALTER ADD 9 columns; UPDATE class value 'Class 9' to '9'; ALTER ADD CHECK on status; ALTER ADD UNIQUE on (business_id, class, section, roll_number, academic_year); CREATE partial INDEX on active students. ~30 minutes work.
 
+### 2026-05-05 — business_id alignment + class normalisation + marks UNIQUE
+**Changes:**
+- `business_id` alignment across 14 tables (362 rows updated to `'biz_001'` in single transaction)
+- Class normalisation across 3 tables (`student_profiles`, `subjects`, `teacher_assignments`) — `'Class 9'` → `'9'`
+- UNIQUE constraint `marks_unique_per_student_per_exam` added on `biz_001.marks` (5-column: `business_id, student_id, subject_id, exam_type, exam_date`)
+
+### 2026-05-06 — Class normalisation extended + teacher_subjects FK repoint
+**Changes:**
+- Class normalisation extended to `teacher_subjects` (4th table)
+- `teacher_subjects.subject_id` repointed for Ramesh (`b1000001-…`) from orphaned `a1b2c301-0002-…` to current Mathematics UUID `bdde6895-c643-47a0-a513-4552aa6e42b7`
+- Backup table `biz_001.teacher_subjects_backup_20260506` created (RLS-enabled, postgres-only)
+
+### 2026-05-06 — Stage 5 build merged
+**Changes:**
+- PR #2 squash-merged to main (commit `b883c74`)
+- MarksTab ~860 lines added; 5 diagnostic console.log lines removed for shipping
+- T1–T6 all PASSED
+
 ## Next task
 
-**Stage 5 — MarksTab live wiring.** Currently mid-stage at student_profiles audit (full 8-query audit per Process discipline rule). Once audit complete, proceed with ALTER plan:
-
-1. ALTER TABLE biz_001.student_profiles ADD COLUMN — 9 missing columns: roll_number (will become NOT NULL after backfill), admission_date, gender, photo_url, disability_status (DPA-gated), transport_mode, fee_category, previous_school, academic_year (NOT NULL DEFAULT '2026-27'), status (NOT NULL DEFAULT 'active')
-2. UPDATE 8 existing rows — set class = '9' (was 'Class 9'), set roll_number = 9A01..9A08 in entity_id order, set academic_year = '2026-27', set status = 'active'
-3. ALTER TABLE biz_001.student_profiles — make class NOT NULL, section NOT NULL, roll_number NOT NULL (only after backfill)
-4. ALTER TABLE biz_001.student_profiles ADD CONSTRAINT — status CHECK ('active','transferred','graduated','withdrawn'); UNIQUE (business_id, class, section, roll_number, academic_year)
-5. CREATE INDEX student_profiles_class_section_idx ON biz_001.student_profiles (business_id, class, section, academic_year) WHERE status = 'active'
-6. Verify all 6 RLS policies still functional (SELECT against each policy as a logged-in test user)
-
-Then proceed with Stage 5 Part D (queries) and Part E (edge cases + T1–T6 test plan), then build via stage-5-marks-tab branch.
-
-## Verified schema facts from Stage 5 planning so far
-
-- `marks` has 14 columns. Required: student_id, subject_id, class, section, exam_type, exam_date, max_marks. Optional: score (NULL = absent for exam), marked_by.
-- `marks` exam_type CHECK: ('Unit Test 1','Unit Test 2','Unit Test 3','Half Yearly','Pre-Final','Annual','Class Test','Assignment') — exact casing. NO 'Mid Term'.
-- `marks` unique constraint: (student_id, subject_id, exam_type, exam_date) — upsert key.
-- `marks` CHECK: score >= 0, max_marks > 0. Database does NOT enforce score <= max_marks — UI must.
-- `subjects` has 9 columns. 7 Class 9 rows seeded as of 2026-05-03: Telugu, Hindi, English, Mathematics, Physical Science, Biological Science, Social Studies. subject_code intentionally NULL.
-- `entities` has 14 columns. Roll number, class, section are NOT direct columns — they live in `student_profiles` (which exists, with 13 columns and 8 test rows pre-seeded).
-- `student_profiles.class` value = `'Class 9'` (per existing data) — needs migration to `'9'` for consistency with subjects table during Stage 5 ALTER.
-- `student_profiles` has 6 RLS policies and 3 dependent tables — DROP forbidden, ALTER required.
+- **Immediate next move:** lawyer email (DPA + Privacy Notice; DPDP Act 2023 + children's data) — gates Wave 1 migration.
+- **Next stage of build:** Pre-Wave-1 hardening sub-stage (this week), then Stage 6 HomeworkTab (Week 2).
