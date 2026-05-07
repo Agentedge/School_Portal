@@ -656,7 +656,9 @@ function AttendanceTab({ assignment, role, showToast, leaveGuardRef }) {
   const [pendingSwitch,         setPendingSwitch]         = useState(null);
   const [dbHasRows,             setDbHasRows]             = useState(false);
 
+  const hasUnsavedRef = useRef(false);
   const hasUnsavedChanges = !compareAttendanceMaps(attendanceMap, originalAttendanceMap);
+  hasUnsavedRef.current = hasUnsavedChanges;
   const sunday            = isSundayDate(selectedDate);
   const maxPeriodForDay   = getMaxPeriod(selectedDate);
   const saveButtonEnabled = hasUnsavedChanges && loadingState !== "saving";
@@ -775,11 +777,24 @@ function AttendanceTab({ assignment, role, showToast, leaveGuardRef }) {
   useEffect(() => {
     if (!leaveGuardRef) return;
     leaveGuardRef.current = (commit) => {
-      if (hasUnsavedChanges) setPendingSwitch({ type: "external", commit: commit });
+      if (hasUnsavedRef.current) setPendingSwitch({ type: "external", commit: commit });
       else commit();
     };
     return () => { if (leaveGuardRef) leaveGuardRef.current = null; };
-  }, [hasUnsavedChanges, leaveGuardRef]);
+  }, [leaveGuardRef]);
+
+  // beforeunload guard — added 2026-05-08 (Pre-Wave-1 #2 fix)
+  // Closes browser-tab-close / refresh data loss for unsaved attendance edits
+  useEffect(() => {
+    const handler = (e) => {
+      if (hasUnsavedChanges) {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [hasUnsavedChanges]);
 
   const setStatus = (studentId, status) => {
     setAttendanceMap(p => ({ ...p, [studentId]: status }));
