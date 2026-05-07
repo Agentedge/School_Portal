@@ -1046,6 +1046,11 @@ function MarksTab({ assignment, role, showToast, leaveGuardRef }) {
   const [pendingNavigation,setPendingNavigation]= useState(null);
   const [showMakeUpModal,  setShowMakeUpModal]  = useState(false);
   const [makeUpDate,       setMakeUpDate]       = useState("");
+  // Today's date in YYYY-MM-DD format, local timezone (used as max for make-up date picker)
+  const todayLocalISO = (function() {
+    const d = new Date();
+    return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  })();
   const [makeUpRows,       setMakeUpRows]       = useState([]);
   const [makeUpError,      setMakeUpError]      = useState(null);
 
@@ -1493,7 +1498,7 @@ function MarksTab({ assignment, role, showToast, leaveGuardRef }) {
       return;
     }
     if (availableDates.find(d => d.exam_date === makeUpDate)) {
-      setMakeUpError("That date already has marks. Pick a different date.");
+      setMakeUpError(makeUpDate + " already has marks. Pick a different date.");
       return;
     }
     const dirtyRows = makeUpRows.filter(r => r.isDirty);
@@ -1823,10 +1828,16 @@ function MarksTab({ assignment, role, showToast, leaveGuardRef }) {
             <div style={{ marginBottom:12 }}>
               <label style={{ fontSize:11, fontWeight:700, color:"#64748b", fontFamily:font, textTransform:"uppercase", letterSpacing:0.5 }}>Make-up Date</label>
               <input type="date" value={makeUpDate}
+                max={todayLocalISO}
                 onChange={e => setMakeUpDate(e.target.value)}
                 style={{ marginTop:4, width:"100%", boxSizing:"border-box", padding:"10px 12px",
                   borderRadius:10, border:"1.5px solid #e2e8f0", fontSize:13, fontFamily:font,
                   outline:"none", color:"#1e293b", background:"#f8fafc" }} />
+              {availableDates.length > 0 && (
+                <div style={{ marginTop:4, fontSize:11, color:"#64748b", fontFamily:font }}>
+                  Already used: {availableDates.map(d => d.exam_date).join(", ")}
+                </div>
+              )}
             </div>
 
             <div style={{ fontSize:12, color:"#475569", marginBottom:8 }}>
