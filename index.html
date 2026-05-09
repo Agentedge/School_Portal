@@ -3205,6 +3205,7 @@ function AiTutorModal({messages,input,setInput,onSend,loading,onClose}){
 function App() {
   const [screen, setScreen]           = useState("login");
   const [role, setRole]               = useState("Student");
+  const roleRef = useRef(role);
   const [assignment, setAssignment]   = useState(null);
   const [activeTab, setActiveTab]     = useState("home");
   const [students, setStudents]       = useState(INITIAL_STUDENTS);
@@ -3265,6 +3266,9 @@ function App() {
         return;
       }
       if (event === 'SIGNED_IN') {
+        // Pre-Wave-1 #12: skip refetch if we already have user context (same-tab login already fetched).
+        // Cross-tab login still works: in the other tab, roleRef.current is "Student" until refetch completes.
+        if (roleRef.current !== "Student") return;
         setTimeout(async () => {
           if (cancelled) return;
           const restored = await restoreFromSession(session);
@@ -3285,6 +3289,9 @@ function App() {
       subscription.unsubscribe();
     };
   }, []);
+
+  // Pre-Wave-1 #12: keep roleRef in sync with role state — read by the SIGNED_IN guard inside the auth useEffect
+  useEffect(() => { roleRef.current = role; }, [role]);
 
   // Demo: student = Koppula Thanmaya Sri, parent = Muddam Shankar (has 2 kids: Divya & Manoj)
   const loggedParent = PARENTS[1];
