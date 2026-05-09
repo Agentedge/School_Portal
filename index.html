@@ -148,7 +148,7 @@ function Sel({ label, value, onChange, options }) {
       <select value={value} onChange={onChange}
         style={{ padding:"11px 12px", borderRadius:10, border:"1.5px solid #e2e8f0",
           fontSize:13, fontFamily:font, outline:"none", color:"#1e293b", background:"#f8fafc" }}>
-        {options.map(o=><option key={o.value||o} value={o.value||o}>{o.label||o}</option>)}
+        {options.map(o=><option key={o.value??o} value={o.value??o}>{o.label??o}</option>)}
       </select>
     </div>
   );
