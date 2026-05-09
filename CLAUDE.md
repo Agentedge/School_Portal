@@ -1,7 +1,7 @@
 # AgentEdge — St. Stephen's School Portal (Pathshala)
 
 ## Project Context
-This is the Pathshala portal for St. Stephen's School (biz_001). Single-file React 18 + Babel CDN app in index.html. No build step, no npm install — everything runs from CDN. Deployed via Vercel (vercel.json present); Netlify also auto-deploys preview environments — canonical deployment decision is open. Repo: github.com/Agentedge/School_Portal.
+This is the Pathshala portal for St. Stephen's School (biz_001). Single-file React 18 + Babel CDN app in index.html. No build step, no npm install — everything runs from CDN. Deployed via Vercel (vercel.json present); auto-deploys from GitHub `main` pushes. Migrated from Netlify in early days of project. Repo: github.com/Agentedge/School_Portal.
 
 Owner: Bhargav Avadhanula (AgentEdge founder, M&A IT Consultant at Deloitte USI, Hyderabad)
 Methodology: SAP ACTIVATE adapted (phases, waves, cutover, hypercare).
@@ -128,6 +128,24 @@ These corrections apply across all remaining stages — record once, never debug
        → biz_001.entities.metadata.auth_user_id
    Any one of these breaks and marked_by inserts fail silently.
 
+4. agent_signals_all is the moat-feed read surface (added 2026-05-08).
+   Each biz_XXX schema has agent_signals_all as a view UNIONing
+   agent_signals (live) and agent_signals_archive. Pattern is consistent
+   across all 4 business schemas (biz_001-004). The future moat aggregation
+   pipeline (Layer 1 → Layer 3 ae_intelligence) consumes from this view,
+   not directly from agent_signals + agent_signals_archive. ae_intelligence
+   currently has 4 scaffolded tables (benchmarks, cross_signal_patterns,
+   health_score_inputs, signal_aggregates) but no pipeline functions,
+   triggers, or scheduled jobs. Moat aggregation = post-go-live work;
+   activates when a second school enters the pipeline.
+
+5. ae_platform.user_roles.business_id is TEXT, not UUID (added 2026-05-08).
+   The get_user_role() function casts ur.business_id::uuid in its JOIN
+   to ae_platform.businesses(id) — the cast is required because the
+   columns are different types. Rule #1 above says "business_id is UUID
+   in ae_platform tables" — that's true for ae_platform.businesses(id)
+   but NOT for ae_platform.user_roles(business_id), which is TEXT.
+
 ## RLS role values
 Stored lowercase in ae_platform.user_roles ('principal', 'teacher', 'parent', 'student').
 get_user_role() returns title case via INITCAP(). Policies check against title case. INITCAP is the SINGLE translation layer — never toLowerCase() anywhere else.
@@ -149,26 +167,29 @@ get_user_role() returns title case via INITCAP(). Policies check against title c
 - agentedge_unified.html: separate repo decision pending; currently sits outside School_Portal.
 
 ## Pre-Wave-1 hardening backlog
-1. ✅ **CLOSED 2026-05-07:** Class normalisation audit across remaining tables (academic_calendar, attendance, marks, house_points, fee_structure, transport_routes, transport_stops, plus any other table with a `class` column). 39 rows updated across 3 tables (`biz_001.attendance` 29 rows, `biz_001.fee_structure` 4 rows, `biz_001.teacher_subjects` 6 rows).
-2. AttendanceTab stale-closure audit — apply ref-based leave-guard pattern same as MarksTab fix
-3. `teacher_subjects` full rebuild with real teacher-subject assignments from Stephen (current rows are partly orphaned; only Ramesh's row was repointed today)
-4. Auth credential creation for TCH002-TCH007 — 2 of 8 teachers (PRIN001 + TCH001-TCH007) have auth: Principal (PRIN001 / auth_user_id 55784bb1) + Class Teacher Ramesh (TCH001 / auth_user_id 2eb28e93). Subject teachers TCH002-TCH007 not yet wired.
-5. Improve marks save error handling — currently shows misleading "no longer assigned to this class" for any RLS rejection; surface real DB error code/message instead
-6. Disable already-used dates in make-up exam date picker (currently server-validated only via toast on conflict)
-7. Constrain make-up date input to today or earlier (no `min`/`max` attributes today)
-8. Improve shared `Sel` component to handle empty/falsy values (`o.value !== undefined ? o.value : o`)
-9. `audit_log` trigger fix — use `NEW.business_id` instead of `OLD`
-10. 9-or-10 column ALTER plan for `student_profiles` (deferred from Stage 5)
-11. DELETE-on-parent discipline: audit FK-like references in dependent tables before destructive operations
-12. Redundant auth restore on page refresh — on F5, `get_user_role` and `teacher_assignments` fire twice (once from the initial `getSession()` path, once from the `SIGNED_IN` event after `getSession()` resolves). ~100ms wasted round-trips. Not a ship-blocker. Fix with a guard flag or by relying on `onAuthStateChange` alone (dropping the explicit `getSession()` call).
-13. ✅ **CLOSED 2026-05-07:** Drop `biz_002.user_roles` — architectural drift cleaned; table dropped (was empty scaffolding).
-14. Investigate `agent_signals_all` naming pattern — determine whether it is a view, duplicate table, or architectural drift. Document the answer.
-15. Audit `biz_003` (Bhargavi Developers) and `biz_004` (Printing Press) schemas for `user_roles` drift similar to what was found in `biz_002`. Proactive cleanup before those verticals start.
-16. Investigate `teacher_profiles` asymmetry vs `student_profiles` — `student_profiles` exists, `teacher_profiles` does not. Decide whether to add `teacher_profiles` or remove `student_profiles` for symmetry.
-17. Email convention reconciliation — `auth.users` uses test pattern (e.g., `teacher1.test@agentedge.in`); `biz_001.entities` use real school emails. Defer execution until Stephen confirms domain.
-18. Confirm full body of `get_user_role()` function — visually verify the WHERE clause matches the role case convention documented in the Schema architectural rules section above.
+1. ✅ **CLOSED 2026-05-07:** Class normalisation audit across remaining tables. 39 rows updated across 3 tables (`biz_001.attendance` 29, `biz_001.fee_structure` 4, `biz_001.teacher_subjects` 6 — all `'Class 9'` → `'9'`). Captured in migration 007.
+2. ✅ **CLOSED 2026-05-07:** AttendanceTab hardening. Original description ("stale-closure audit") was misleading — verified bug was missing `beforeunload` guard (tab-close data loss). Fix added `hasUnsavedRef` mirror + `beforeunload` handler, mirroring MarksTab `dirtyCountRef` pattern. Commit `584c8c5`.
+3. `teacher_subjects` full rebuild with real teacher-subject assignments from Stephen (current rows are partly orphaned; only Ramesh's row was repointed). **Stephen-blocked.**
+4. Auth credential creation for TCH002-TCH007 — 2 of 8 teachers (PRIN001 + TCH001-TCH007) have auth. **UAT-gated; designed but execution deferred.**
+5. ✅ **CLOSED 2026-05-07:** Marks save error handling. Both upsert sites in MarksTab (~index.html L1383 primary, ~L1513 make-up) now log structured `{code, message, details, hint}` to console + show diagnostic code suffix in user message. Replaces misleading "you may no longer be assigned to this class" copy with neutral "Couldn't save — your access may have changed." Commit `e84ba07`.
+6. ✅ **CLOSED 2026-05-08:** Make-up date picker UX — helper text below input lists already-used dates from `availableDates`; duplicate-date error message now names the conflicting date. Commit `fc48ad6`. Drift correction: original framing "disable already-used dates" was partially mis-described — save-time validation already existed at L1495; the gap was UX feedback.
+7. ✅ **CLOSED 2026-05-08:** Constrain make-up date input — added `max={todayLocalISO}` to date input. Browser-enforced (no future dates). Commit `fc48ad6`.
+8. ✅ **CLOSED 2026-05-08:** `Sel` component falsy-value handling. Replaced `||` with `??` in three places inside `options.map(...)` so legitimate `0` and `""` values pass through. Tagged `[LATENT-BUG]` — all 4 current callers (Period, Student, Category, Icon) verified safe; fix is defensive against future regression. Commit `5e8c790`.
+9. ✅ **CLOSED 2026-05-07:** `biz_001.log_audit()` function fix. Original description ("NEW.business_id vs OLD") was misleading — real bug was UPDATE branch losing OLD data because `TG_OP IN ('DELETE')` only included DELETE. Fix expanded to `TG_OP IN ('UPDATE', 'DELETE')`. Captured in migration 007.
+10. ✅ **CLOSED 2026-05-08:** Added 10 missing columns to `biz_001.student_profiles` via migration 008. Columns: roll_number, gender [DPDP], photo_url, admission_date, fee_category, transport_mode, previous_school, disability_status [DPDP], academic_year, enrollment_status (NOT NULL DEFAULT 'enrolled'). Drift correction: original spec listed "status" — renamed to `enrollment_status` because `entities.status` already exists. student_profiles now has 23 columns (was 13). Commit `11b3426`.
+11. ✅ **CLOSED 2026-05-08:** DELETE-on-parent discipline rule expanded into Process discipline section (see "DELETE-on-parent discipline").
+12. ✅ **CLOSED 2026-05-08:** Same-tab login duplicate fetch fix. Original description ("redundant auth restore on F5") was misleading — App-level F5 path is clean (`INITIAL_SESSION` already ignored). Verified bug fires on fresh same-tab login: `LoginScreen.handleSignIn` fetches role + teacher_assignments; `signInWithPassword` triggers `SIGNED_IN`; App's `onAuthStateChange` refetches the same data. Fix mirrors AttendanceTab `hasUnsavedRef` pattern: `roleRef` mirrors role state via separate `useEffect`; `SIGNED_IN` handler skips refetch when `roleRef.current !== "Student"` (cross-tab login still works). Commit `c7a9bdc`.
+13. ✅ **CLOSED 2026-05-07:** Drop `biz_002.user_roles` — architectural drift cleaned; table dropped (was empty scaffolding). Captured in migration 007.
+14. ✅ **CLOSED 2026-05-08:** `agent_signals_all` investigation complete. Confirmed per-schema view UNIONing `agent_signals` (live) + `agent_signals_archive`; pattern consistent across all 4 business schemas. Strategic reframe during investigation: this is also the read surface for the moat aggregation pipeline. ae_intelligence schema has 4 scaffolded tables (`signal_aggregates`, `cross_signal_patterns`, `benchmarks`, `health_score_inputs`) but no pipeline functions/triggers/scheduled jobs — moat aggregation = post-go-live work (activates at second school). See new architectural rule #4 in Schema architectural rules section.
+15. Audit `biz_003` (Bhargavi Developers) and `biz_004` (Printing Press) schemas for `user_roles` drift. **Deferred — other verticals; revisit when those businesses activate.**
+16. ✅ **CLOSED 2026-05-08:** Created `biz_001.teacher_profiles` table via migration 009 (Path A: mirror `student_profiles` shape). 15 columns: id, business_id, entity_id, employee_code, joining_date, qualifications, employment_type, photo_url, gender [DPDP], date_of_birth [DPDP], blood_group, employment_status (NOT NULL DEFAULT 'active'), metadata, created_at, updated_at. Plus index `idx_teacher_profiles_entity_id`. Drift correction: original spec called this "asymmetry" — on verification, no `teacher_profiles` table existed at all. Reframed and resolved. Commit `b10dbb8`.
+17. Email convention reconciliation — `auth.users` uses test pattern; `biz_001.entities` use real school emails. **Deferred until Stephen confirms domain.**
+18. ✅ **CLOSED 2026-05-08:** `get_user_role()` function body verified clean. Function correctly scopes by `auth.uid()` AND `b.schema_name = 'biz_001'`; INITCAP role-case convention holds. No code change needed.
+19. Backfill migrations 000-006 from live Supabase to repo. CLAUDE.md migration log references migrations 000-006 by name, but only 007, 008, 009 exist as files in `sql/`. Reconstruct missing migrations from live Supabase schema state for full audit trail and idempotent re-run capability.
 
-**Pre-Wave-1 backlog: 16 open + 2 closed = 18 items tracked (as of 2026-05-07).**
+**Pre-Wave-1 backlog: 5 open + 14 closed = 19 items tracked (as of 2026-05-08).**
+
+Open items: #3 (Stephen-blocked), #4 (UAT-gated), #15 (other verticals — deferred), #17 (domain-gated), #19 (migrations backfill — execution deferred).
 
 ## Wave 2 / Stage 4 deferred UX backlog
 - **Principal read-only view:** Hide edit controls post-Stage 4 (currently functional via assignment=null path; refine UI affordances).
@@ -180,7 +201,6 @@ get_user_role() returns title case via INITCAP(). Policies check against title c
 ## Open non-technical items
 - **Lawyer call (PARKED but URGENT):** DPA + Privacy Notice drafting. Hard gate before Wave 1 migration. The longer this slips, the more it constrains May 10 to June 1 path. (User has explicitly chosen to leave the lawyer call out of current technical-track conversations; flag in build logs.)
 - **Stephen call:** Lock May 10 as data delivery date. Confirm Saturday period count practical usage. Confirm Half Day vs Leave usage in practice. Resend data template with explicit deadline.
-- **Vercel vs Netlify decision:** Both auto-deploy preview environments. Pick canonical (recommend Vercel). Disconnect the other.
 - **Domain purchase:** School-relevant TLD (e.g. ststephens.school or pathshala.school). Blocks marketing site.
 - **Pricing decision:** Rs.15 vs Rs.35 entry pricing question outstanding from Apr 24. Doesn't block tech work but blocks pilot agreement, marketing site copy, CA pitch.
 - **Marketing site:** Overdue ~11+ days. One page, screenshots, pricing, "Book a Demo" wa.me link.
@@ -232,14 +252,52 @@ When proposing edits to CLAUDE.md, always run `git checkout main && git pull && 
 ### Class normalisation is a cross-cutting discipline (learned 2026-05-06)
 Class normalisation is a cross-cutting data-quality discipline. 4th occurrence today (`subjects`, `teacher_assignments`, `student_profiles`, `teacher_subjects`). Every table with a `class` column requires auditing.
 
-### Never DELETE without auditing FK-like references in dependent tables (learned 2026-05-06)
-Never DELETE rows from a parent table without auditing FK-like references in dependent tables first. Yesterday's `subjects` re-seed left orphaned `subject_id`s in `teacher_subjects`, which broke the RLS chain at marks INSERT today.
+### DELETE-on-parent discipline (learned 2026-05-06, expanded 2026-05-08 via Pre-Wave-1 #11)
+Before any DELETE on a "parent" table — defined as any table whose `id` is referenced by columns in other tables — execute these steps in order:
+
+1. **Query for dependents.** For each candidate dependent table, run this SQL pattern (replacing the placeholders):
+
+       SELECT * FROM <child_schema>.<child_table>
+       WHERE <fk_column> = '<parent_row_id>';
+
+   Empty result = no dependents = safe. Non-empty result = step 2.
+
+2. **Decide explicit handling for each dependent set:**
+   - **CASCADE** — delete dependents along with parent. Use only when dependents have no value without parent.
+   - **SET NULL** — detach dependents but keep them. Use when dependents should survive.
+   - **RESTRICT** — refuse the DELETE if dependents exist. Forces explicit cleanup first.
+   - **Manual cleanup** — handle dependents in a separate step before parent DELETE.
+
+3. **Many of our tables LACK FK constraints** (a future "tighten FKs" migration is on the deferred list). Without FK enforcement, Postgres will NOT prevent or cascade automatically — silent orphans are the default. Plan accordingly.
+
+4. **Document the decision in the migration script** before executing.
+
+5. **If unsure, RESTRICT first.** Safer to fail than to silently orphan.
+
+Original incident (2026-05-06): `subjects` re-seed left orphaned `subject_id`s in `teacher_subjects`, which broke the RLS chain at `marks` INSERT — caused ~2 hours of misdirected debugging. Rule was added that day, then expanded to current form on 2026-05-08 as part of Pre-Wave-1 #11 closure.
 
 ### Save-side error messages must surface real DB error code (learned 2026-05-06)
 Save-side error messages must surface real DB error code and message. Generic JS guesses obscure root cause; today's "no longer assigned to this class" hid an RLS 42501 rejection and cost ~2 hours of misdirected debugging.
 
 ### Schema-sensitive facts get verified by query, not by build-log re-read (learned 2026-05-07)
 Schema-sensitive facts get verified by query, not by build-log re-read. Build log claims about schema state (table location, column type, row counts, FK relationships) cannot be trusted at face value. Always run an `information_schema` query against the live database before writing code that depends on schema facts. Two corrections were made on 2026-05-07 because of this — both cost 30+ minutes each.
+
+### Re-verify backlog items against live state before working them (learned 2026-05-08)
+When picking up a Pre-Wave-1 backlog item to work on, do NOT trust the description as written in CLAUDE.md or in build logs. Re-verify against the live system before designing any fix. Verification methods in priority order:
+1. **Direct query** against the live database (`information_schema`, `pg_class`, etc.) or live file (`sed`/`grep` on the actual code).
+2. **Fresh read** of the relevant code section, not a paraphrase from a build log.
+3. **Most recent commit message** for that area of the code.
+
+**Forbidden:** verifying by re-reading the build log entry that originally captured the item — that's circular verification and doesn't catch drift between capture-time and now.
+
+Five Pre-Wave-1 items in the May 6-8 sweep had partially-misleading or outdated descriptions discovered only via this re-verification:
+- #2 ("stale-closure" → real bug was missing `beforeunload`)
+- #6 ("disable already-used dates" → save validation already existed; gap was UX hint)
+- #9 ("NEW vs OLD business_id" → real bug was UPDATE branch losing OLD data)
+- #12 ("F5" → real bug fires on fresh same-tab login, not F5)
+- #16 ("asymmetry" → table didn't exist at all)
+
+Without this rule, all five would have been worked from incorrect designs.
 
 ## Architectural decisions (locked, do not re-litigate)
 
@@ -265,7 +323,7 @@ Schema-sensitive facts get verified by query, not by build-log re-read. Build lo
 - **Local working directory:** `~/agentedge/School_Portal/` on Windows + WSL2 + Ubuntu 24
 - **Node.js:** v24.15.0
 - **Supabase:** Mumbai region (ap-south-1) — database and authentication
-- **Vercel + Netlify:** Both currently auto-deploying preview environments. Canonical decision pending (recommend Vercel).
+- **Vercel:** Canonical deployment platform. Auto-deploys from GitHub `main` pushes. Migrated from Netlify in early days of the project.
 - **gh CLI:** Installed and authenticated. Use `gh pr create --base main --fill` for PRs.
 - **Branch model:** `main` (production), feature branches `stage-N-...` per stage.
 - **Local dev server:** `python3 -m http.server 8000` from repo root. Never serve via `file://`.
@@ -365,6 +423,49 @@ Schema-sensitive facts get verified by query, not by build-log re-read. Build lo
 - PR #2 squash-merged to main (commit `b883c74`)
 - MarksTab ~860 lines added; 5 diagnostic console.log lines removed for shipping
 - T1–T6 all PASSED
+
+### 2026-05-07 — Migration 007 (Pre-Wave-1 cleanup part 1)
+**Reason:** Capture three Pre-Wave-1 fixes in a committed migration script for audit trail and idempotency. First migration committed to repo; previous migrations 000-006 referenced in this log but exist only in live Supabase (Pre-Wave-1 #19 to backfill).
+
+**Changes captured:**
+- Class normalisation across 3 tables (39 rows updated): `biz_001.attendance` (29), `biz_001.fee_structure` (4), `biz_001.teacher_subjects` (6) — all `'Class 9'` → `'9'`
+- `DROP TABLE biz_002.user_roles` — architectural drift cleanup; was empty scaffolding
+- `biz_001.log_audit()` function fix: UPDATE branch was losing OLD data because `TG_OP IN ('DELETE')` only included DELETE; expanded to `TG_OP IN ('UPDATE', 'DELETE')`. Verified via no-op UPDATE on `biz_001.attendance` producing `has_old_data=true`.
+
+**Closes:** Pre-Wave-1 #1, #9, #13. Commit `a5fb49c`.
+
+### 2026-05-08 — Migration 008 (Pre-Wave-1 cleanup part 2)
+**Reason:** Add 10 missing columns to `biz_001.student_profiles` per Pre-Wave-1 #10 design.
+
+**Changes:**
+- `ALTER TABLE biz_001.student_profiles ADD COLUMN IF NOT EXISTS` for 10 columns (idempotent): `roll_number text`, `gender text [DPDP]`, `photo_url text`, `admission_date date`, `fee_category text`, `transport_mode text`, `previous_school text`, `disability_status text [DPDP]`, `academic_year text`, `enrollment_status text NOT NULL DEFAULT 'enrolled'`
+- `COMMENT ON COLUMN` for each new column
+
+**Drift correction:** Original build log listed "status" — but `entities.status` already exists. Renamed to `enrollment_status` to disambiguate entity-level vs student-level state.
+
+**Verified post-migration:** `student_profiles` now has 23 columns (was 13). All 10 new columns present with correct types, defaults, and nullability.
+
+**DPDP gate:** `gender` and `disability_status` columns added; real values must NOT be migrated until DPA is signed and parental consent is captured.
+
+**Closes:** Pre-Wave-1 #10. Commit `11b3426`.
+
+### 2026-05-08 — Migration 009 (Pre-Wave-1 cleanup part 3)
+**Reason:** Create `biz_001.teacher_profiles` table per Pre-Wave-1 #16 design (Path A: mirror `student_profiles` shape with teacher-specific columns).
+
+**Drift correction:** Original build log called this "asymmetry vs student_profiles." On verification, no `teacher_profiles` table existed at all. Reframed and resolved.
+
+**Changes:**
+- `CREATE TABLE IF NOT EXISTS biz_001.teacher_profiles` with 15 columns: id (uuid PK), business_id, entity_id (NOT NULL), employee_code, joining_date, qualifications, employment_type, photo_url, gender [DPDP], date_of_birth [DPDP], blood_group, employment_status (NOT NULL DEFAULT 'active'), metadata (jsonb), created_at, updated_at
+- `CREATE INDEX IF NOT EXISTS idx_teacher_profiles_entity_id` on `entity_id`
+- `COMMENT ON TABLE` + 9 column comments
+
+**Future work (NOT in scope of 009):** FK constraint `entity_id → entities(id)`, audit_log trigger, RLS policies. To be done in dedicated migrations.
+
+**Verified post-migration:** Table exists with 15 columns; defaults and NOT NULL constraints correct.
+
+**DPDP gate:** `gender` and `date_of_birth` columns added; real values must NOT be migrated until DPA is signed.
+
+**Closes:** Pre-Wave-1 #16. Commit `b10dbb8`.
 
 ## Next task
 
