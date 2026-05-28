@@ -1907,6 +1907,683 @@ function MarksTab({ assignment, role, showToast, leaveGuardRef }) {
   );
 }
 
+// ─── HOMEWORK TAB (Stage 6) ──────────────────────────────────────────────────
+
+const HOMEWORK_TYPES = ["Worksheet", "Project", "Reading", "Quiz", "Assignment"];
+
+const HOMEWORK_STATUS_OPTIONS = ["Not Submitted", "Submitted", "Late", "Graded"];
+
+const HOMEWORK_STATUS_COLOR = {
+  "Not Submitted": "#94a3b8",
+  "Submitted":     "#3182CE",
+  "Late":          "#D69E2E",
+  "Graded":        "#38A169",
+};
+
+function HomeworkTab({ assignment, role, showToast, leaveGuardRef }) {
+  const BUSINESS_ID   = "biz_001";
+  const CLASS         = "9";
+  const ACADEMIC_YEAR = "2026-27";
+
+  const formatDate = (iso) => {
+    if (!iso) return "";
+    const d = new Date(iso + "T00:00:00");
+    const mon = d.toLocaleString("en-US", { month: "short" });
+    return mon + " " + d.getDate();
+  };
+
+  const [teacherEntityId,  setTeacherEntityId]  = useState(null);
+  const [subjectOptions,   setSubjectOptions]   = useState([]);
+  const [selectedSubject,  setSelectedSubject]  = useState("");
+  const [homeworkOptions,  setHomeworkOptions]  = useState([]);
+  const [selectedHomework, setSelectedHomework] = useState(null);
+  const [roster,           setRoster]           = useState([]);
+  const [studentRows,      setStudentRows]      = useState([]);
+  const [loadingState,      setLoadingState]      = useState("idle");
+  const [errorMessage,      setErrorMessage]      = useState(null);
+  const [pendingNavigation, setPendingNavigation] = useState(null);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [createForm, setCreateForm] = useState({
+    title: "",
+    subjectId: "",
+    dueDate: "",
+    homeworkType: "Worksheet",
+    maxScore: "20",
+    instructions: ""
+  });
+  const [createErrors, setCreateErrors] = useState({});
+  const [creating, setCreating] = useState(false);
+
+  const homeworkReqSeqRef         = useRef(0);
+  const homeworkAcceptedSeqRef    = useRef(0);
+  const submissionsReqSeqRef      = useRef(0);
+  const submissionsAcceptedSeqRef = useRef(0);
+  const hasUnsavedRef             = useRef(false);
+
+  const dirtyCount = studentRows.filter(r => r.isDirty).length;
+  hasUnsavedRef.current = dirtyCount > 0;
+
+  const validation = (() => {
+    if (!selectedHomework) return { perRowErrors: new Map() };
+    const maxN = Number(selectedHomework.max_score);
+    const perRowErrors = new Map();
+    for (const row of studentRows) {
+      if (!row.isDirty) continue;
+      if (row.status === "Graded") {
+        if (row.score === "" || row.score === null || row.score === undefined) {
+          perRowErrors.set(row.studentId, "Enter a score");
+          continue;
+        }
+        const n = Number(row.score);
+        if (Number.isNaN(n))            perRowErrors.set(row.studentId, "Must be a number");
+        else if (n < 0)                 perRowErrors.set(row.studentId, "Cannot be negative");
+        else if (maxN > 0 && n > maxN)  perRowErrors.set(row.studentId, "Cannot exceed " + maxN);
+      }
+    }
+    return { perRowErrors };
+  })();
+
+  const canSave = dirtyCount > 0 && validation.perRowErrors.size === 0 && loadingState !== "saving";
+
+  useEffect(() => {
+    let cancelled = false;
+    if (role === "Principal") {
+      setErrorMessage("Principal-wide homework view ships in a later stage. Stage 6 currently scopes to a class teacher.");
+      return;
+    }
+    if (!assignment || !assignment.class || !assignment.section) {
+      setErrorMessage("Your class assignment is incomplete. Contact admin.");
+      return;
+    }
+    (async () => {
+      setLoadingState("loading-bootstrap");
+      setErrorMessage(null);
+      const { data: { session } } = await db.auth.getSession();
+      if (cancelled) return;
+      if (!session) return;
+      const { data: ent, error: entErr } = await db
+        .from("entities").select("id")
+        .eq("metadata->>auth_user_id", session.user.id).single();
+      if (cancelled) return;
+      if (entErr || !ent) {
+        setErrorMessage("Could not identify your teacher record. Contact admin.");
+        setLoadingState("idle");
+        return;
+      }
+      setTeacherEntityId(ent.id);
+      const { data: subs, error: subErr } = await db
+        .from("subjects").select("subject_id, subject_name")
+        .eq("business_id", BUSINESS_ID).eq("class", CLASS)
+        .eq("academic_year", ACADEMIC_YEAR).eq("is_active", true)
+        .order("subject_name");
+      if (cancelled) return;
+      if (subErr) { setErrorMessage("Could not load subjects — try again."); setLoadingState("idle"); return; }
+      setSubjectOptions(subs || []);
+      const { data: rosterData, error: rosterErr } = await db
+        .from("student_profiles")
+        .select("id, entity_id, admission_number, roll_number, section, entity:entities!student_profiles_entity_id_fkey(first_name, last_name)")
+        .eq("business_id", BUSINESS_ID)
+        .eq("class", assignment.class).eq("section", assignment.section)
+        .order("admission_number");
+      if (cancelled) return;
+      if (rosterErr) { setErrorMessage("Could not load class roster — try again."); setLoadingState("idle"); return; }
+      setRoster(rosterData || []);
+      setLoadingState("idle");
+    })().catch(e => {
+      console.error("HomeworkTab mount error:", e);
+      if (!cancelled) { setErrorMessage("Could not load homework tab — try again."); setLoadingState("idle"); }
+    });
+    return () => { cancelled = true; };
+  }, [assignment, role]);
+
+  useEffect(() => {
+    if (!selectedSubject) { setHomeworkOptions([]); setSelectedHomework(null); setStudentRows([]); return; }
+    let cancelled = false;
+    const mySeq = ++homeworkReqSeqRef.current;
+    (async () => {
+      setLoadingState("loading-homework"); setErrorMessage(null);
+      const { data, error } = await db
+        .from("homework")
+        .select("homework_id, title, homework_type, max_score, assigned_date, due_date, instructions")
+        .eq("business_id", BUSINESS_ID).eq("class", assignment.class).eq("section", assignment.section)
+        .eq("subject_id", selectedSubject).eq("is_active", true)
+        .order("assigned_date", { ascending: false });
+      if (cancelled) return;
+      if (mySeq < homeworkAcceptedSeqRef.current) return;
+      if (error) { setErrorMessage("Could not load homework list — try again."); setLoadingState("idle"); return; }
+      homeworkAcceptedSeqRef.current = mySeq;
+      setHomeworkOptions(data || []); setSelectedHomework(null); setStudentRows([]); setLoadingState("idle");
+    })().catch(e => {
+      console.error("HomeworkTab homework-load error:", e);
+      if (!cancelled) { setErrorMessage("Could not load homework list — try again."); setLoadingState("idle"); }
+    });
+    return () => { cancelled = true; };
+  }, [selectedSubject, assignment]);
+
+  useEffect(() => {
+    if (!selectedHomework || roster.length === 0) { setStudentRows([]); return; }
+    let cancelled = false;
+    const mySeq = ++submissionsReqSeqRef.current;
+    (async () => {
+      setLoadingState("loading-submissions"); setErrorMessage(null);
+      const { data, error } = await db
+        .from("homework_submissions")
+        .select("submission_id, student_id, status, score, submitted_at, attempt_number")
+        .eq("business_id", BUSINESS_ID).eq("homework_id", selectedHomework.homework_id);
+      if (cancelled) return;
+      if (mySeq < submissionsAcceptedSeqRef.current) return;
+      if (error) { setErrorMessage("Could not load submissions — try again."); setLoadingState("idle"); return; }
+      submissionsAcceptedSeqRef.current = mySeq;
+      const submissionsByStudent = new Map();
+      for (const s of (data || [])) submissionsByStudent.set(s.student_id, s);
+      const rows = roster.map(r => {
+        const sub = submissionsByStudent.get(r.entity_id);
+        const status = sub ? sub.status : "Not Submitted";
+        const score  = sub && sub.score !== null && sub.score !== undefined ? Number(sub.score) : "";
+        return {
+          studentId: r.entity_id,
+          admissionNo: r.admission_number || "",
+          rollNo: r.roll_number || "",
+          name: ((r.entity && r.entity.first_name) || "") + " " + ((r.entity && r.entity.last_name) || ""),
+          section: r.section,
+          status, score,
+          submissionId: sub ? sub.submission_id : null,
+          submittedAt:  sub ? sub.submitted_at  : null,
+          attemptNumber: sub ? sub.attempt_number : 1,
+          originalStatus: status, originalScore: score, isDirty: false,
+        };
+      });
+      setStudentRows(rows); setLoadingState("idle");
+    })().catch(e => {
+      console.error("HomeworkTab submissions-load error:", e);
+      if (!cancelled) { setErrorMessage("Could not load submissions — try again."); setLoadingState("idle"); }
+    });
+    return () => { cancelled = true; };
+  }, [selectedHomework, roster]);
+
+  useEffect(() => {
+    if (!leaveGuardRef) return;
+    leaveGuardRef.current = (commit) => {
+      if (hasUnsavedRef.current) setPendingNavigation({ type: "external", commit });
+      else commit();
+    };
+    return () => { if (leaveGuardRef) leaveGuardRef.current = null; };
+  }, [leaveGuardRef]);
+
+  useEffect(() => {
+    const handler = (e) => { if (hasUnsavedRef.current) { e.preventDefault(); e.returnValue = ""; } };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, []);
+
+  const setRowStatus = (studentId, newStatus) => {
+    setStudentRows(prev => prev.map(r => {
+      if (r.studentId !== studentId) return r;
+      const newScore = newStatus === "Graded" ? r.score : "";
+      const scoreChanged = (newScore !== "" || r.originalScore !== "") && String(newScore) !== String(r.originalScore);
+      const isDirty = newStatus !== r.originalStatus || scoreChanged;
+      return { ...r, status: newStatus, score: newScore, isDirty };
+    }));
+  };
+
+  const setRowScore = (studentId, newScore) => {
+    setStudentRows(prev => prev.map(r => {
+      if (r.studentId !== studentId) return r;
+      const isDirty = r.status !== r.originalStatus || String(newScore) !== String(r.originalScore);
+      return { ...r, score: newScore, isDirty };
+    }));
+  };
+
+  const requestSubjectChange = (newSubject) => {
+    if (newSubject === selectedSubject) return;
+    if (hasUnsavedRef.current) setPendingNavigation({ type: "subject", value: newSubject });
+    else setSelectedSubject(newSubject);
+  };
+
+  const requestHomeworkChange = (newHwId) => {
+    if (selectedHomework && newHwId === selectedHomework.homework_id) return;
+    const hw = homeworkOptions.find(h => h.homework_id === newHwId) || null;
+    if (hasUnsavedRef.current) setPendingNavigation({ type: "homework", value: hw });
+    else setSelectedHomework(hw);
+  };
+
+  const cancelLeave = () => setPendingNavigation(null);
+
+  const discardLeave = () => {
+    if (!pendingNavigation) return;
+    setStudentRows(prev => prev.map(r => ({ ...r, status: r.originalStatus, score: r.originalScore, isDirty: false })));
+    const p = pendingNavigation;
+    setPendingNavigation(null);
+    if (p.type === "subject")        setSelectedSubject(p.value);
+    else if (p.type === "homework")  setSelectedHomework(p.value);
+    else if (p.type === "external")  p.commit();
+  };
+
+  const onSave = async () => {
+    if (!canSave) return;
+    if (!teacherEntityId) { setErrorMessage("Cannot identify your teacher record. Refresh and retry."); return; }
+    const dirtyRows = studentRows.filter(r => r.isDirty);
+    if (dirtyRows.length === 0) return;
+    const payload = dirtyRows.map(r => ({
+      business_id:    BUSINESS_ID,
+      homework_id:    selectedHomework.homework_id,
+      student_id:     r.studentId,
+      status:         r.status,
+      score:          r.status === "Graded" ? Number(r.score) : null,
+      submitted_at:   r.status === "Not Submitted" ? null : (r.submittedAt || new Date().toISOString()),
+      attempt_number: r.attemptNumber || 1,
+    }));
+    setLoadingState("saving"); setErrorMessage(null);
+    const { error } = await db.from("homework_submissions").upsert(payload, { onConflict: "homework_id,student_id" });
+    if (error) {
+      console.error("[HomeworkTab] Save failed:", { code: error.code, message: error.message, details: error.details, hint: error.hint });
+      const isRls = error.code === "42501" || /row-level security|permission denied/i.test(error.message || "");
+      const codeSuffix = error.code ? " (code: " + error.code + ")" : "";
+      setErrorMessage(isRls
+        ? "Couldn't save — your access may have changed. Refresh and contact admin if this persists." + codeSuffix
+        : "Save failed — please refresh and try again." + codeSuffix);
+      setLoadingState("idle");
+      return;
+    }
+    setStudentRows(prev => prev.map(r => ({ ...r, originalStatus: r.status, originalScore: r.score, isDirty: false })));
+    setLoadingState("idle");
+    if (showToast) showToast("Saved " + dirtyRows.length + " homework record(s)");
+  };
+
+  const openCreateModal = () => {
+    setCreateForm({
+      title: "",
+      subjectId: selectedSubject || (subjectOptions[0] && subjectOptions[0].subject_id) || "",
+      dueDate: "",
+      homeworkType: "Worksheet",
+      maxScore: "20",
+      instructions: ""
+    });
+    setCreateErrors({});
+    setShowCreateModal(true);
+  };
+
+  const closeCreateModal = () => {
+    if (creating) return;
+    setShowCreateModal(false);
+    setCreateErrors({});
+  };
+
+  const setCreateField = (field, value) => {
+    setCreateForm(prev => ({ ...prev, [field]: value }));
+    setCreateErrors(prev => {
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
+  };
+
+  const validateCreate = () => {
+    const errors = {};
+    const f = createForm;
+    const title = (f.title || "").trim();
+    if (title.length < 3) errors.title = "Title must be at least 3 characters";
+    else if (title.length > 100) errors.title = "Title must be 100 characters or fewer";
+    if (!f.subjectId) errors.subjectId = "Choose a subject";
+    if (!f.dueDate) errors.dueDate = "Pick a due date";
+    if (!["Quiz", "Worksheet", "Reading", "Project"].includes(f.homeworkType)) {
+      errors.homeworkType = "Pick a valid type";
+    }
+    const ms = parseInt(f.maxScore, 10);
+    if (!Number.isFinite(ms) || ms < 1 || ms > 100) errors.maxScore = "Must be a number from 1 to 100";
+    if (f.instructions && f.instructions.length > 500) errors.instructions = "Maximum 500 characters";
+    return errors;
+  };
+
+  const submitCreate = async () => {
+    const errors = validateCreate();
+    if (Object.keys(errors).length > 0) {
+      setCreateErrors(errors);
+      return;
+    }
+    setCreating(true);
+    try {
+      const payload = {
+        business_id:   BUSINESS_ID,
+        title:         createForm.title.trim(),
+        subject_id:    createForm.subjectId,
+        class:         assignment.class,
+        section:       assignment.section,
+        due_date:      createForm.dueDate,
+        homework_type: createForm.homeworkType,
+        max_score:     parseInt(createForm.maxScore, 10),
+        instructions:  createForm.instructions.trim() || null,
+        assigned_by:   teacherEntityId || null,
+      };
+      const { data, error } = await db.from("homework").insert(payload).select().single();
+      if (error) {
+        console.error("[HomeworkTab] Create homework failed:", {
+          code: error.code, message: error.message, details: error.details, hint: error.hint
+        });
+        let msg = error.message || error.code || "unknown error";
+        if (error.code === "42501" || /row-level security|permission denied/i.test(error.message || "")) {
+          msg = "permission denied — you may not have rights to create homework for this class";
+        } else if (error.code === "23514") {
+          msg = "invalid value (check constraint failed)";
+        }
+        if (showToast) showToast("Failed to create homework: " + msg);
+        setCreating(false);
+        return;
+      }
+      const sameSubject = data.subject_id === selectedSubject;
+      if (sameSubject) {
+        setHomeworkOptions(prev => [data, ...prev]);
+        setSelectedHomework(data);
+      }
+      setShowCreateModal(false);
+      setCreating(false);
+      setCreateErrors({});
+      if (showToast) {
+        showToast(sameSubject
+          ? "Homework created — " + roster.length + " students assigned"
+          : "Homework created — switch subjects to view it");
+      }
+    } catch (e) {
+      console.error("[HomeworkTab] Unexpected error creating homework:", e);
+      if (showToast) showToast("Failed to create homework: unexpected error — check console");
+      setCreating(false);
+    }
+  };
+
+  const subjectSelectOptions = subjectOptions.map(s => ({ value: s.subject_id, label: s.subject_name }));
+  const homeworkSelectOptions = homeworkOptions.map(h => ({
+    value: h.homework_id,
+    label: h.title + " (" + h.homework_type + ", due " + formatDate(h.due_date) + ")",
+  }));
+
+  if (errorMessage && roster.length === 0 && !teacherEntityId) {
+    return (
+      <Card>
+        <Ttl>📚 Homework</Ttl>
+        <div style={{ background:"#fff7ed", border:"1px solid #fdba74", color:"#9a3412",
+          borderRadius:10, padding:"12px 14px", fontSize:13, fontWeight:600, fontFamily:font }}>
+          ⚠️ {errorMessage}
+        </div>
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <Ttl>📚 Homework</Ttl>
+      <div style={{ display:"flex", justifyContent:"flex-end", marginBottom:10 }}>
+        <button onClick={openCreateModal}
+          style={{ padding:"8px 14px", borderRadius:8, border:"none",
+            background:"#1a1a2e", color:"white", fontWeight:700, fontSize:12,
+            fontFamily:font, cursor:"pointer" }}>
+          + New Homework
+        </button>
+      </div>
+      <div style={{ marginBottom:10 }}>
+        <Sel label="Subject" value={selectedSubject}
+          onChange={e => requestSubjectChange(e.target.value)}
+          options={[{value:"", label:"— Pick subject —"}, ...subjectSelectOptions]} />
+      </div>
+      {selectedSubject && (
+        <div style={{ marginBottom:10 }}>
+          <Sel label="Homework" value={selectedHomework ? selectedHomework.homework_id : ""}
+            onChange={e => requestHomeworkChange(e.target.value)}
+            options={[{value:"", label: homeworkOptions.length === 0 ? "— No homework yet for this subject —" : "— Pick homework —"}, ...homeworkSelectOptions]} />
+        </div>
+      )}
+      {loadingState !== "idle" && loadingState !== "saving" && (
+        <div style={{ fontSize:11, fontWeight:700, color:"#64748b", marginBottom:10,
+          textTransform:"uppercase", letterSpacing:0.5, fontFamily:font }}>Loading…</div>
+      )}
+      {errorMessage && (
+        <div style={{ background:"#fef2f2", border:"1px solid #fca5a5", color:"#991b1b",
+          borderRadius:10, padding:"10px 14px", fontSize:12, fontWeight:600, marginBottom:10, fontFamily:font }}>
+          ⚠️ {errorMessage}
+        </div>
+      )}
+      {selectedHomework && (
+        <div style={{ background:"#f8fafc", borderRadius:10, padding:"12px 14px",
+          marginBottom:14, border:"1px solid #e2e8f0" }}>
+          <div style={{ fontSize:14, fontWeight:800, color:"#1e293b", marginBottom:6, fontFamily:font }}>
+            {selectedHomework.title}
+          </div>
+          <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:6 }}>
+            <Badge text={selectedHomework.homework_type} color="#3182CE" bg="#EBF8FF" />
+            <Badge text={"Due " + formatDate(selectedHomework.due_date)} color="#D69E2E" bg="#FFFBEB" />
+            <Badge text={"Max " + selectedHomework.max_score} color="#38A169" bg="#F0FFF4" />
+          </div>
+          {selectedHomework.instructions && (
+            <div style={{ fontSize:12, color:"#64748b", marginTop:6, lineHeight:1.4, fontFamily:font }}>
+              {selectedHomework.instructions}
+            </div>
+          )}
+        </div>
+      )}
+      {selectedHomework && studentRows.length > 0 && (
+        <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+          {studentRows.map(row => {
+            const rowError = validation.perRowErrors.get(row.studentId);
+            return (
+              <div key={row.studentId} style={{ background:"#f8fafc", borderRadius:10, padding:"10px 12px" }}>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
+                  <div>
+                    <div style={{ fontSize:13, fontWeight:700, color:"#1e293b", fontFamily:font }}>{row.name}</div>
+                    <div style={{ fontSize:10, fontWeight:600, color:"#94a3b8", marginTop:2, fontFamily:font }}>
+                      {row.admissionNo}{row.rollNo ? " · Roll " + row.rollNo : ""}
+                    </div>
+                  </div>
+                  {row.isDirty && (
+                    <div title="Unsaved" style={{ width:8, height:8, borderRadius:"50%", background:"#f59e0b" }} />
+                  )}
+                </div>
+                <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom: row.status === "Graded" ? 8 : 0 }}>
+                  {HOMEWORK_STATUS_OPTIONS.map(opt => {
+                    const selected = row.status === opt;
+                    const color = HOMEWORK_STATUS_COLOR[opt];
+                    return (
+                      <button key={opt} onClick={() => setRowStatus(row.studentId, opt)}
+                        style={{ flex:"1 1 0", minWidth:64, padding:"7px 4px", borderRadius:8,
+                          border: selected ? ("1.5px solid " + color) : "1.5px solid #e2e8f0",
+                          background: selected ? color : "white", color: selected ? "white" : "#475569",
+                          fontWeight:700, fontSize:11, fontFamily:font, cursor:"pointer" }}>
+                        {opt}
+                      </button>
+                    );
+                  })}
+                </div>
+                {row.status === "Graded" && (
+                  <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                    <input type="number" value={row.score}
+                      onChange={e => setRowScore(row.studentId, e.target.value)}
+                      placeholder="Score" min="0" max={selectedHomework.max_score}
+                      style={{ flex:1, padding:"8px 10px", borderRadius:8,
+                        border: rowError ? "1.5px solid #E53E3E" : "1.5px solid #e2e8f0",
+                        background:"white", fontSize:13, fontWeight:700, color:"#1e293b", fontFamily:font, outline:"none" }} />
+                    <div style={{ fontSize:13, fontWeight:700, color:"#64748b", fontFamily:font }}>
+                      / {selectedHomework.max_score}
+                    </div>
+                  </div>
+                )}
+                {rowError && (
+                  <div style={{ marginTop:4, color:"#E53E3E", fontSize:11, fontWeight:600, fontFamily:font }}>
+                    {rowError}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {selectedHomework && studentRows.length > 0 && (
+        <div style={{ display:"flex", alignItems:"center", gap:10, marginTop:14 }}>
+          {dirtyCount > 0 && (
+            <div title="Unsaved" style={{ width:10, height:10, borderRadius:"50%", background:"#f59e0b" }} />
+          )}
+          <div style={{ flex:1 }}>
+            <button onClick={onSave} disabled={!canSave}
+              style={{ width:"100%", padding:"12px", borderRadius:12, border:"none",
+                cursor: canSave ? "pointer" : "not-allowed",
+                background: canSave ? "#38A169" : "#cbd5e1",
+                color:"white", fontWeight:800, fontSize:14, fontFamily:font }}>
+              {loadingState === "saving" ? "Saving…" : (dirtyCount > 0 ? "Save " + dirtyCount + " Change" + (dirtyCount === 1 ? "" : "s") + " ✓" : "Save Homework ✓")}
+            </button>
+          </div>
+        </div>
+      )}
+      {selectedSubject && homeworkOptions.length === 0 && loadingState === "idle" && !errorMessage && (
+        <div style={{ background:"#f1f5f9", borderRadius:10, padding:"14px 16px",
+          color:"#475569", fontSize:13, fontWeight:600, textAlign:"center", fontFamily:font }}>
+          No homework yet for this subject. (Create-Homework UI ships in Stage 6f.)
+        </div>
+      )}
+      {pendingNavigation && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(15,23,42,0.55)",
+          display:"flex", alignItems:"center", justifyContent:"center", zIndex:200, padding:24 }}>
+          <div style={{ background:"white", borderRadius:14, padding:20, maxWidth:340, width:"100%",
+            boxShadow:"0 12px 40px rgba(0,0,0,0.3)", fontFamily:font }}>
+            <div style={{ fontSize:15, fontWeight:800, color:"#1e293b", marginBottom:8 }}>
+              Unsaved changes
+            </div>
+            <div style={{ fontSize:13, color:"#64748b", marginBottom:16, lineHeight:1.5 }}>
+              You have unsaved homework edits. Switch anyway?
+            </div>
+            <div style={{ display:"flex", gap:8 }}>
+              <button onClick={cancelLeave}
+                style={{ flex:1, padding:"10px", borderRadius:10, border:"1.5px solid #e2e8f0",
+                  background:"white", color:"#475569", fontWeight:700, fontSize:13, fontFamily:font, cursor:"pointer" }}>
+                Cancel
+              </button>
+              <button onClick={discardLeave}
+                style={{ flex:1, padding:"10px", borderRadius:10, border:"none",
+                  background:"#E53E3E", color:"white", fontWeight:700, fontSize:13, fontFamily:font, cursor:"pointer" }}>
+                Discard
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showCreateModal && (
+        <div onClick={closeCreateModal}
+          style={{ position:"fixed", inset:0, background:"rgba(15,23,42,0.55)",
+            display:"flex", alignItems:"center", justifyContent:"center", zIndex:200, padding:24 }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ background:"white", borderRadius:14, padding:20, maxWidth:380, width:"100%",
+              maxHeight:"90vh", overflowY:"auto", boxShadow:"0 12px 40px rgba(0,0,0,0.3)", fontFamily:font }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
+              <div style={{ fontSize:15, fontWeight:800, color:"#1e293b" }}>
+                Create New Homework
+              </div>
+              <button onClick={closeCreateModal} disabled={creating}
+                style={{ background:"transparent", border:"none", fontSize:18, color:"#94a3b8",
+                  cursor: creating ? "not-allowed" : "pointer", opacity: creating ? 0.5 : 1, lineHeight:1 }}>
+                ✕
+              </button>
+            </div>
+
+            <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+              <div>
+                <Sel label="Subject *" value={createForm.subjectId}
+                  onChange={e => setCreateField("subjectId", e.target.value)}
+                  options={[{value:"", label:"— Choose subject —"}, ...subjectSelectOptions]} />
+                {createErrors.subjectId && (
+                  <div style={{ color:"#E53E3E", fontSize:11, fontWeight:600, marginTop:4, fontFamily:font }}>
+                    {createErrors.subjectId}
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <Inp label="Title *" value={createForm.title}
+                  onChange={e => setCreateField("title", e.target.value)}
+                  placeholder="e.g., Algebra Practice Set 3" />
+                {createErrors.title && (
+                  <div style={{ color:"#E53E3E", fontSize:11, fontWeight:600, marginTop:4, fontFamily:font }}>
+                    {createErrors.title}
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <Sel label="Type *" value={createForm.homeworkType}
+                  onChange={e => setCreateField("homeworkType", e.target.value)}
+                  options={[
+                    {value:"Worksheet", label:"Worksheet"},
+                    {value:"Project",   label:"Project"},
+                    {value:"Reading",   label:"Reading"},
+                    {value:"Quiz",      label:"Quiz"},
+                  ]} />
+                {createErrors.homeworkType && (
+                  <div style={{ color:"#E53E3E", fontSize:11, fontWeight:600, marginTop:4, fontFamily:font }}>
+                    {createErrors.homeworkType}
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <Inp label="Due Date *" type="date" value={createForm.dueDate}
+                  onChange={e => setCreateField("dueDate", e.target.value)} />
+                {createErrors.dueDate && (
+                  <div style={{ color:"#E53E3E", fontSize:11, fontWeight:600, marginTop:4, fontFamily:font }}>
+                    {createErrors.dueDate}
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <Inp label="Max Score *" type="number" value={createForm.maxScore}
+                  onChange={e => setCreateField("maxScore", e.target.value)} />
+                {createErrors.maxScore && (
+                  <div style={{ color:"#E53E3E", fontSize:11, fontWeight:600, marginTop:4, fontFamily:font }}>
+                    {createErrors.maxScore}
+                  </div>
+                )}
+              </div>
+
+              <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
+                <label style={{ fontSize:11, fontWeight:700, color:"#64748b", fontFamily:font,
+                  textTransform:"uppercase", letterSpacing:0.5 }}>
+                  Instructions (optional)
+                </label>
+                <textarea value={createForm.instructions} rows={3} maxLength={500}
+                  onChange={e => setCreateField("instructions", e.target.value)}
+                  placeholder="Any specific guidance for students…"
+                  style={{ padding:"11px 12px", borderRadius:10, border:"1.5px solid #e2e8f0",
+                    fontSize:13, fontFamily:font, outline:"none", color:"#1e293b",
+                    background:"#f8fafc", resize:"vertical", minHeight:60 }} />
+                <div style={{ display:"flex", justifyContent:"space-between", marginTop:2 }}>
+                  {createErrors.instructions
+                    ? <span style={{ color:"#E53E3E", fontSize:11, fontWeight:600, fontFamily:font }}>
+                        {createErrors.instructions}
+                      </span>
+                    : <span></span>}
+                  <span style={{ color:"#94a3b8", fontSize:11, fontFamily:font }}>
+                    {(createForm.instructions || "").length}/500
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display:"flex", gap:8, marginTop:16 }}>
+              <button onClick={closeCreateModal} disabled={creating}
+                style={{ flex:1, padding:"10px", borderRadius:10, border:"1.5px solid #e2e8f0",
+                  background:"white", color:"#475569", fontWeight:700, fontSize:13,
+                  fontFamily:font, cursor: creating ? "not-allowed" : "pointer", opacity: creating ? 0.6 : 1 }}>
+                Cancel
+              </button>
+              <button onClick={submitCreate} disabled={creating}
+                style={{ flex:1, padding:"10px", borderRadius:10, border:"none",
+                  background:"#38A169", color:"white", fontWeight:700, fontSize:13,
+                  fontFamily:font, cursor: creating ? "not-allowed" : "pointer", opacity: creating ? 0.6 : 1 }}>
+                {creating ? "Creating…" : "Create Homework ✓"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+}
+
 function AdminPanel({ students, setStudents, housePoints, setHousePoints, events, setEvents, assignment }) {
   const [tab, setTab]     = useState("marks");
   const [toast, setToast] = useState("");
@@ -1917,10 +2594,12 @@ function AdminPanel({ students, setStudents, housePoints, setHousePoints, events
   // unsaved edits trigger a confirm dialog before tab switches.
   const leaveGuardRef      = useRef(null);
   const marksLeaveGuardRef = useRef(null);
+  const homeworkLeaveGuardRef = useRef(null);
   const requestTabChange = (newTabId) => {
     if (newTabId === tab) return;
     if (tab === "attend" && leaveGuardRef.current)           leaveGuardRef.current(() => setTab(newTabId));
     else if (tab === "marks" && marksLeaveGuardRef.current)  marksLeaveGuardRef.current(() => setTab(newTabId));
+    else if (tab === "homework" && homeworkLeaveGuardRef.current) homeworkLeaveGuardRef.current(() => setTab(newTabId));
     else setTab(newTabId);
   };
 
@@ -1952,6 +2631,7 @@ function AdminPanel({ students, setStudents, housePoints, setHousePoints, events
   const adminTabs = [
     {id:"marks",  icon:"📝", label:"Marks"},
     {id:"attend", icon:"📅", label:"Attend."},
+    {id:"homework", icon:"📚", label:"Homework"},
     {id:"house",  icon:"🏆", label:"House Pts"},
     {id:"spts",   icon:"⭐", label:"Stu. Pts"},
     {id:"events", icon:"🎯", label:"Events"},
@@ -2015,6 +2695,15 @@ function AdminPanel({ students, setStudents, housePoints, setHousePoints, events
           role={assignment ? "Teacher" : "Principal"}
           showToast={showToast}
           leaveGuardRef={leaveGuardRef} />
+      )}
+
+      {/* HOMEWORK — Stage 6 live wiring */}
+      {tab==="homework" && (
+        <HomeworkTab
+          assignment={assignment}
+          role={assignment ? "Teacher" : "Principal"}
+          showToast={showToast}
+          leaveGuardRef={homeworkLeaveGuardRef} />
       )}
 
       {/* HOUSE POINTS */}
