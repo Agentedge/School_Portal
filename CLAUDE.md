@@ -1,473 +1,368 @@
 # AgentEdge — St. Stephen's School Portal (Pathshala)
 
 ## Project Context
-This is the Pathshala portal for St. Stephen's School (biz_001). Single-file React 18 + Babel CDN app in index.html. No build step, no npm install — everything runs from CDN. Deployed via Vercel (vercel.json present); auto-deploys from GitHub `main` pushes. Migrated from Netlify in early days of project. Repo: github.com/Agentedge/School_Portal.
+This is the Pathshala portal repo for St. Stephen's School (`biz_001`). Single-file React 18 + Babel CDN app in `index.html` (4,108 lines as of 2026-05-29). No build step, no `npm install` — everything runs from CDN. Deployed via Vercel, auto-deploys from GitHub `main` pushes. Migrated from Netlify in early days. Repo: `github.com/Agentedge/School_Portal`.
 
-Owner: Bhargav Avadhanula (AgentEdge founder, M&A IT Consultant at Deloitte USI, Hyderabad)
+Owner: Bhargav Avadhanula (AgentEdge founder, M&A IT Consultant at Deloitte USI, Hyderabad).
 Methodology: SAP ACTIVATE adapted (phases, waves, cutover, hypercare).
-Go-live target: June 1, 2026
+**Go-live target: June 8, 2026** (revised from June 1).
 Pilot customer: St. Stephen's School, Sangareddy, Telangana (KG-10, ~600 students). Owner Stephen; mother is principal. Project codename: "Project Genesis."
+
+This repo is one of two products in the school vertical. The other is **AgentEdge Unified** — the school owner's intelligence dashboard with 8 agents, in a separate repo (`Agentedge/AgentEdge_Unified`). Both products share the same Supabase project and `biz_001` schema. RLS enforces who sees what across both.
 
 ## Strategic Anchor
 AgentEdge is the autonomous business operating system for Indian SMEs, distributed via CA firms (white-label, revenue share). Not a tool company — an operating layer. Moat: Indian compliance depth (GST/TDS/Tally) + CA channel + business graph. Geography: Hyderabad first, then pan-India.
 
 Two-product architecture for the school vertical:
-- **Pathshala** — the school portal where teachers, students, and parents work. Data entry + consumption.
-- **AgentEdge for Schools** (agentedge_unified.html) — the intelligence/agent layer for the school owner. Reads operational data; writes agent_signals and interventions.
+- **Pathshala** (this repo) — student/parent/teacher app. Data entry + consumption.
+- **AgentEdge Unified** (separate repo) — intelligence/agent layer for the school owner. Reads operational data; writes `agent_signals` and `interventions`.
 
-Both products talk to the same Supabase database, biz_001 schema. RLS enforces who sees what across both.
+Pipeline: St. Stephen's School (biz_001), Satya Caterers (biz_002, parked), Bhargavi Developers (biz_003), Sri Lakshmi Printing Press (biz_004).
 
-Four pipeline businesses: St. Stephen's School (biz_001), Satya Caterers (biz_002, parked), Bhargavi Developers (biz_003), Sri Lakshmi Printing Press (biz_004).
+GTM constraint: Telugu AI tutor content tied to SCERT syllabus. School product is limited to Telangana state board for now. CBSE/ICSE need additional content builds.
 
-## Database — Supabase (ap-south-1 Mumbai)
-Project: Agentedge's-Dev
-Schema-per-business architecture (locked CDO decision — never row-per-business).
-biz_001 = St. Stephens.
-biz_001 business UUID: cc460eea-9945-4e60-a17d-2a93754d5659
+## Current State Snapshot — 2026-05-29
 
-Three-layer data model (locked):
-- **Layer 1 — Universal Core (7 tables):** businesses, entities, transactions, events, documents, agent_signals, interventions. Each business owns their data.
-- **Layer 2 — Vertical Extensions:** student_profiles (school), catering_profiles, properties, print_job_profiles. Each business owns their data.
-- **Layer 3 — ae_intelligence:** Anonymised aggregates, cross-SME patterns, benchmarks, health scores. No PII. AgentEdge proprietary — the moat. NEVER exposed to clients.
+### Shipped (Stages 1–6 all DONE)
+- **Stage 1**: Supabase client (`db`) initialised via `AGENTEDGE_CONFIG` (jsDelivr UMD; default schema = `biz_001`).
+- **Stage 2**: LoginScreen wired to `db.auth.signInWithPassword`; role from `db.rpc('get_user_role')`; teacher class/section scoping via `teacher_assignments`.
+- **Stage 3**: Session restore via `db.auth.getSession()` + `onAuthStateChange` subscription (with deadlock fix applied — see Technical Rules).
+- **Stage 4**: AttendanceTab live-wired to `biz_001.attendance`. Period-level grid (P1–P7 weekday / P1–P4 Saturday). Teacher write; Principal read-only. Merged via PR #1.
+- **Stage 5**: MarksTab live-wired to `biz_001.marks`. Three-branch UX (fresh / silent-load / make-up). Merged via PR #2 (commit `b883c74`).
+- **Stage 6**: HomeworkTab live-wired to `biz_001.homework` + `biz_001.homework_submissions`. View, grade, and create. M024 auto-cascade trigger validated end-to-end via UI insert. Merged via PR #3 (commit `c2b81ad`). **Production verification still PENDING at time of writing.**
 
-Schemas in the project: ae_platform (4 tables), biz_001 through biz_004 (each ~8+ tables), ae_intelligence (3 tables). DPDP right-to-erasure = drop schema.
+### Still on mock data
+- ClassOverview / Performance / Insights tabs (teacher view)
+- Parent dashboard (all tabs)
+- Student dashboard (all tabs)
+- The teacher's homework UI is wired; parent/student READ-only homework views are filed as **B-43 (MEDIUM)** — Phase 2 work.
 
-Two-layer agent naming (locked architectural rule):
-- DB always stores universal Pulse names: CashPulse, RetentionPulse, TeamPulse, EngagePulse, OutcomePulse, OutreachPulse, PipelinePulse, AssetPulse.
-- UI shows industry-specific names: FeeAlert, AdmissionRadar, AttritionGuard, RouteWatch, StaffPulse, AttendanceFlag, ResultPredictor, ParentBridge.
-- agent_signals.agent_name = 'CashPulse' always, NEVER 'FeeAlert'. Translation lives only in frontend.
+### Active blockers
+- **Auth credentials:** only PRIN001 (Principal) and TCH001 (Ramesh) work. TCH002–TCH009 not provisioned. Blocks UAT round 1.
+- **Wave 1 real student data:** template returned with sample rows only. Stephen has not delivered actual Class 9 student data.
+- **DPA + Privacy Notice:** not drafted. Lawyer email unsent (>16 days deferred). Hard gate for Wave 1 real data ingestion under DPDP Act 2023.
+- **Domain:** not purchased. Still on default Vercel subdomain.
+- **Supabase free-tier auto-pause (S-1):** project auto-pauses after ~7 days idle. Caused a "Failed to fetch" outage during Stage 6 smoke testing on May 28. Must upgrade to paid tier (~$25/mo) before St. Stephen's hits live traffic.
 
-Deployed (as of 2026-04-18):
-- 24 tables in biz_001 (extended beyond the original 8 via 003_school_schema_correction.sql which added 15 tables resolving 7 deferred assumptions: parent_id design, dedicated attendance/marks/homework tables, house_points, transport tables, fee_structure + fee_payments, subjects + teacher_subjects + academic_calendar, teacher_assignments)
-- 59 RLS policies live across all 24 tables (deployed via 004_fix_rls_column_names.sql; supersedes original 004 which had wrong column names)
-- 4 test auth users created and linked
-- Wave 0 mock data loaded (230+ rows across 16 tables)
-- 8 demo students in Class 9 Section A
+### Next decision — three candidate paths (no commitment yet)
+Ordered by go-live impact:
+1. **Non-technical blockers** (lawyer email → Stephen data call → domain). Single highest-leverage move.
+2. **Wave A agent wiring** (in AgentEdge Unified repo) — RouteWatch, AdmissionRadar, HomeView, StaffPulse already on live data; 4 of 8 agents remain on mock.
+3. **Parent + Student views (B-43)** — required for full Phase 1, but not strictly gating June 8 teacher-facing functionality.
 
-## Test auth users
-Password for all four: AgentEdgeTest2026!
-- principal.test@agentedge.in  → UUID 55784bb1-3ad8-4a31-95dc-972f70c9b4b4 → role 'principal' → Sr. Philomena David
-- teacher1.test@agentedge.in   → UUID 2eb28e93-f7bb-49d6-b760-223144fa9d4c → role 'teacher' → Ramesh Babu Yerra (Class 9A Class Teacher)
-- parent1.test@agentedge.in    → UUID 343e527c-d0c3-494b-999b-6c9871ee7c21 → role 'parent' → Venkat Reddy (parent of STU001)
-- student1.test@agentedge.in   → UUID 103bbc83-fe72-492f-b45b-144a01318417 → role 'student' → Ravi Kumar Reddy (STU001)
+## Database — Supabase (Mumbai, ap-south-1)
 
-## Technical rules — NEVER violate
-- No export default in CDN React files
-- No JSX in pure HTML — React.createElement only (for agentedge_unified.html when we touch it)
-- Always run `node --check` on any standalone .js files before declaring work complete
-- Always catch(e) — never catch {}
-- No nested backtick template literals
-- No escaped apostrophes in encodeURIComponent — rephrase instead
-- jsDelivr (not cdnjs) for Babel
-- Use actual deployed column names — NEVER design-doc names
-- Serve the portal via `python3 -m http.server 8000`, never file:// — Supabase JS blocks file protocol
-- One feature branch per stage. Branch naming: `stage-N-short-description`. Permanent PR record, easy rollback, sane history.
-- Sensitive medical/health data (e.g. disability_status) is DPA-gated. Column may exist; do NOT populate values until DPA is signed and school explicitly opts in per DPDP Act 2023.
-- **Supabase `onAuthStateChange` deadlock rule:** NEVER await a Supabase call (rpc, from, auth.signOut, etc.) directly inside the `onAuthStateChange` callback. Supabase holds an internal auth lock while the callback runs — awaiting any Supabase method deadlocks the next `getSession()`. Wrap the async work in `setTimeout(async () => { ... }, 0)` so it runs after the callback returns. The callback itself must be synchronous (no `async` keyword). Learned the hard way on 2026-04-26 — `getSession()` hung indefinitely on page refresh until fixed.
+**Project:** `Agentedge's-Dev` (single Supabase project. Main branch serves as production today — no separate dev/prod yet.)
+**Region:** Mumbai (ap-south-1) — non-negotiable, set before project creation.
+**Schema-per-business architecture (LOCKED):** each pilot business gets its own schema. Never row-per-business.
 
-## Column name conventions (actual deployed Supabase schema)
-- class (NOT class_name)
-- student_id (NOT student_entity_id)
-- teacher_id (NOT teacher_entity_id)
-- business_id (NOT school_id)
-- first_name + last_name (NOT name)
-- score (NOT marks_obtained)
-- awarded_to_student_id on house_points (NOT entity_id)
+| Schema | Purpose |
+|---|---|
+| `ae_platform` | System tables: businesses, user_roles, helper functions |
+| `biz_001` | St. Stephen's School (24+ tables) |
+| `biz_002` | Satya Caterers (parked) |
+| `biz_003` | Bhargavi Developers |
+| `biz_004` | Sri Lakshmi Printing Press |
+| `ae_intelligence` | Anonymised aggregates, cross-SME patterns, benchmarks, health scores. **The moat. Never exposed to clients.** Currently 4 scaffolded tables (`signal_aggregates`, `cross_signal_patterns`, `benchmarks`, `health_score_inputs`); no pipeline yet. Activates when second school enters pipeline. |
+
+**biz_001 business UUID:** `cc460eea-9945-4e60-a17d-2a93754d5659`
+
+### Three-layer data model (LOCKED)
+- **Layer 1 — Universal Core (7 tables):** `businesses`, `entities`, `transactions`, `events`, `documents`, `agent_signals`, `interventions`. Each business owns their data.
+- **Layer 2 — Vertical Extensions:** `student_profiles` (school), `catering_profiles`, `properties`, `print_job_profiles`. Each business owns their data.
+- **Layer 3 — `ae_intelligence`:** as above. AgentEdge proprietary.
+
+### Two-layer agent naming (LOCKED ARCHITECTURAL RULE)
+- DB always stores **universal Pulse names**: `CashPulse`, `RetentionPulse`, `TeamPulse`, `EngagePulse`, `OutcomePulse`, `OutreachPulse`, `PipelinePulse`, `AssetPulse`.
+- UI shows **industry-specific names**: FeeAlert, AdmissionRadar, AttritionGuard, RouteWatch, StaffPulse, AttendanceFlag, ResultPredictor, ParentBridge.
+- `agent_signals.agent_name = 'CashPulse'` always, NEVER `'FeeAlert'`. Translation lives only in frontend.
+
+### Deployed state (as of 2026-05-29)
+- 24+ tables in `biz_001`
+- 80+ RLS policies live across `biz_001` (original 59 from M004, expanded by M016–M021)
+- 8 demo students seeded in Class 9 Section A (STU001–STU008 via M022)
+- DPDP right-to-erasure simplicity: drop schema = full erasure
+
+### Test auth users
+Password for all four: `AgentEdgeTest2026!`
+- `principal.test@agentedge.in` → role `principal` → Sr. Philomena David
+- `teacher1.test@agentedge.in` → role `teacher` → Ramesh Babu Yerra (Class 9A Class Teacher)
+- `parent1.test@agentedge.in` → role `parent` → Venkat Reddy (parent of STU001)
+- `student1.test@agentedge.in` → role `student` → Ravi Kumar Reddy (STU001)
+
+Note: only the first two are exercised in the wired teacher flow. Parent/Student logins not yet meaningfully tested against wired data.
+
+## Critical Technical Rules — NEVER violate
+- **No `export default`** in CDN React files
+- **No JSX in pure HTML** — `React.createElement` only (applies to `agentedge_unified.html` in the other repo; Babel CDN in this repo allows JSX in `index.html`)
+- **Always `node --check`** on any standalone `.js` files before declaring work complete
+- **Always `catch(e)`** — never `catch {}`
+- **No nested backtick template literals**
+- **No escaped apostrophes in `encodeURIComponent`** — rephrase instead
+- **jsDelivr (not cdnjs)** for Babel
+- **Use actual deployed column names** — NEVER design-doc names. Always verify via `information_schema` before writing schema-touching code.
+- **Serve via `python3 -m http.server 8000`**, never `file://` — Supabase JS blocks file protocol
+- **One feature branch per stage.** Branch naming: `stage-N-short-description`. PRs merged to `main`, branches deleted after merge.
+- **Sensitive medical/health data** (`disability_status`, `gender`, `date_of_birth`, `blood_group`) is DPA-gated. Columns exist; do NOT populate values until DPA is signed and school opts in per DPDP Act 2023.
+- **Supabase `onAuthStateChange` deadlock rule:** NEVER `await` a Supabase call (`rpc`, `from`, `auth.signOut`, etc.) directly inside the `onAuthStateChange` callback. Supabase holds an internal auth lock while the callback runs — awaiting any Supabase method deadlocks the next `getSession()`. Wrap async work in `setTimeout(async () => { ... }, 0)` so it runs after the callback returns. The callback itself must be synchronous (no `async` keyword). Learned the hard way on 2026-04-26.
+- **WSL2 cannot route IPv6.** For `pg_dump` and direct Postgres connections from WSL, use the Supabase Session Pooler endpoint (`aws-1`, not `aws-0`). The default direct connection times out silently on IPv6 lookup.
+- **Supabase free-tier auto-pauses after ~7 days idle (S-1).** During development this is annoying (~5-min restore). For go-live this is unacceptable. Paid tier upgrade required before St. Stephen's hits live traffic.
 
 ## Schema Reality Notes
+*Corrections that apply across all remaining work — recorded once, never debug twice.*
 
-These corrections apply across all remaining stages — record once, never debug twice.
+### `entities.auth_user_id` does NOT exist as a top-level column
+The auth link lives inside `entities.metadata` JSONB at key `auth_user_id`. To resolve a teacher/student/parent's `entity_id` from their session:
 
-### Caught during Stage 4 testing (2026-05-01)
-- **`entities.auth_user_id` does NOT exist as a top-level column.** The auth link lives inside `entities.metadata` JSONB at key `auth_user_id`. To resolve a teacher/student/parent's `entity_id` from their session:
 ```js
-  .from("entities").select("id").eq("metadata->>auth_user_id", session.user.id).single()
+.from("entities").select("id").eq("metadata->>auth_user_id", session.user.id).single()
 ```
-  Applies to ALL entity types (teacher, student, parent), not just teachers.
 
-- **`student_profiles` has TWO foreign keys to `entities`** — `entity_id` (the student themselves) and `parent_id` (the parent). There is NO `student_id` column on `student_profiles`. When embedding entities from `student_profiles`, disambiguate with the explicit FK hint:
+Applies to ALL entity types, not just teachers. Caught during Stage 4 testing (2026-05-01).
+
+### `student_profiles` has TWO FKs to `entities`
+`entity_id` (the student) and `parent_id` (the parent). There is NO `student_id` column on `student_profiles`. When embedding entities, disambiguate with the explicit FK hint:
+
 ```js
-  .select("entity_id, entities!student_profiles_entity_id_fkey(first_name, last_name)")
+.select("entity_id, entities!student_profiles_entity_id_fkey(first_name, last_name)")
 ```
-  Plain `entities!inner(...)` throws `PGRST201` ("more than one relationship was found"). Also: `class` and `section` ARE top-level columns on `student_profiles` (text, nullable) — `.eq("class", "Class 9").eq("section", "A")` works directly.
 
-### Caught during Stage 5 prep (2026-05-03)
-- **`student_profiles.class` value mismatch.** Existing seed data stores `'Class 9'` (with prefix). The newer `subjects.class` value stores `'9'` (number-as-text only). The Stage 5 ALTER plan will normalise to `'9'` everywhere. Until normalised, marks-related JOIN queries that filter on class must account for this — do NOT assume consistency.
+Plain `entities!inner(...)` throws `PGRST201`. Also: `class` and `section` are top-level columns on `student_profiles`.
 
-- **`student_profiles` table predates Stage 5 planning.** It exists with 13 columns and 8 test rows. Six RLS policies depend on it (entities_teacher_select, teacher_subjects_parent_select, teacher_subjects_student_select, homework_parent_select, homework_student_select, house_points_teacher_all). Three downstream tables also depend on it: teacher_subjects, homework, house_points. **DROP/CASCADE forbidden.** Stage 5 path is ALTER (extend) not DROP+CREATE.
+### `student_profiles.class` is normalised to `'9'` (no prefix)
+Original seed data used `'Class 9'`. Normalised across all 4 tables (`student_profiles`, `subjects`, `teacher_assignments`, `teacher_subjects`) via M007. Class normalisation is a cross-cutting discipline — every table with a `class` column needs auditing during onboarding.
 
-- **`entities` table uses generic flat-column shape with `metadata` JSONB.** Has 14 columns: id, business_id, entity_type, first_name, last_name, phone, email, whatsapp, address, status, tags, metadata (jsonb), created_at, updated_at. Roll number, class, section, parent_id are NOT stored on entities — they live on student_profiles.
+### `marks` table — denormalised, 14 columns
+Key constraints:
+- `exam_type CHECK`: exact casing for `('Unit Test 1', 'Unit Test 2', 'Unit Test 3', 'Half Yearly', 'Pre-Final', 'Annual', 'Class Test', 'Assignment')`. No 'Mid Term'.
+- `score CHECK: score >= 0`. **DB does NOT enforce `score <= max_marks`** — UI must validate.
+- Unique constraint `marks_unique_per_student_per_exam`: 5-column `(business_id, student_id, subject_id, exam_type, exam_date)` — upsert key.
 
-- **`marks` table uses simple denormalised design.** 14 columns: mark_id, business_id (default 'biz_001'), student_id (uuid - entities.id), subject_id (uuid - subjects.subject_id), class, section, exam_type (text), exam_date (date), score (numeric, NULLABLE = absent for exam), max_marks (numeric, NOT NULL), marked_by (uuid - entities.id, nullable), academic_year (default '2026-27'), created_at, updated_at.
-  - **exam_type CHECK:** `('Unit Test 1','Unit Test 2','Unit Test 3','Half Yearly','Pre-Final','Annual','Class Test','Assignment')` — exact casing. NO 'Mid Term'.
-  - **score CHECK:** `score >= 0`. Database does NOT enforce `score <= max_marks` — UI must.
-  - **max_marks CHECK:** `max_marks > 0`.
-  - **Unique constraint:** `marks_unique_per_student_per_exam` — 5-column: `(business_id, student_id, subject_id, exam_type, exam_date)` — upsert key.
-  - **FKs:** student_id - biz_001.entities(id) ON DELETE CASCADE; subject_id - biz_001.subjects(subject_id); marked_by - biz_001.entities(id).
+### `entities` table is generic flat-shape with `metadata` JSONB
+14 columns. Roll number, class, section, parent_id are NOT stored on entities — they live on `student_profiles`.
 
-- **`subjects` table seeded for Class 9 (2026-05-03).** 9 columns: subject_id, business_id, subject_name (NOT NULL), subject_code (NULLABLE), class, academic_year (default '2026-27'), is_active (default true), created_at, updated_at. 7 Class 9 rows seeded: Telugu, Hindi, English, Mathematics, Physical Science, Biological Science, Social Studies. subject_code intentionally NULL for all 7.
+### `subjects` seeded for Class 9 only
+7 subjects active: Telugu, Hindi, English, Mathematics, Physical Science, Biological Science, Social Studies. `subject_code` intentionally NULL.
 
-## Schema architectural rules (added 2026-05-07)
+### Column name conventions (deployed Supabase schema)
+- `class` (NOT `class_name`)
+- `student_id` (NOT `student_entity_id`)
+- `teacher_id` (NOT `teacher_entity_id`)
+- `business_id` (NOT `school_id`)
+- `first_name` + `last_name` (NOT `name`)
+- `score` (NOT `marks_obtained`)
+- `awarded_to_student_id` on `house_points` (NOT `entity_id`)
 
-1. business_id type asymmetry: business_id is TEXT in biz_XXX schemas
-   (e.g., biz_001.attendance.business_id is text). business_id is UUID
-   in ae_platform tables (FK to ae_platform.businesses.id). When writing
-   cross-schema joins or RLS policies, do not assume same type.
+## Schema Architectural Rules
 
-2. Role case convention: ae_platform.user_roles.role stores LOWERCASE
-   strings ('teacher', 'principal'). The get_user_role() function applies
-   INITCAP() and returns TITLE-CASE ('Teacher', 'Principal'). All RLS
-   policies compare against title-case values. Do not change one without
-   the other.
+1. **`business_id` type asymmetry.** `business_id` is `text` in `biz_XXX` schemas (e.g., `biz_001.attendance.business_id` is text). `business_id` is `uuid` in `ae_platform.businesses(id)`. When writing cross-schema joins or RLS policies, do not assume same type. **Exception:** `ae_platform.user_roles.business_id` is `text` — `get_user_role()` casts it to uuid in its JOIN. See rule #5.
 
-3. auth_user_id resolution path: entities.metadata.auth_user_id is the
-   JS resolution mechanism for marked_by payloads. Full path:
-     auth.users
-       → ae_platform.user_roles.auth_user_id
-       → biz_001.teacher_assignments.auth_user_id (where wired)
-       → biz_001.entities.metadata.auth_user_id
-   Any one of these breaks and marked_by inserts fail silently.
+2. **Role case convention.** `ae_platform.user_roles.role` stores LOWERCASE (`'teacher'`, `'principal'`, `'admin_team'`). `get_user_role()` applies `INITCAP()` and returns title-case (`'Teacher'`, `'Principal'`, `'Admin_team'`). All RLS policies compare against title-case values. **INITCAP is the SINGLE translation layer** — never `toLowerCase()` anywhere else.
 
-4. agent_signals_all is the moat-feed read surface (added 2026-05-08).
-   Each biz_XXX schema has agent_signals_all as a view UNIONing
-   agent_signals (live) and agent_signals_archive. Pattern is consistent
-   across all 4 business schemas (biz_001-004). The future moat aggregation
-   pipeline (Layer 1 → Layer 3 ae_intelligence) consumes from this view,
-   not directly from agent_signals + agent_signals_archive. ae_intelligence
-   currently has 4 scaffolded tables (benchmarks, cross_signal_patterns,
-   health_score_inputs, signal_aggregates) but no pipeline functions,
-   triggers, or scheduled jobs. Moat aggregation = post-go-live work;
-   activates when a second school enters the pipeline.
+3. **`auth_user_id` resolution path.** Four hops; any one breaks and `marked_by` inserts fail silently:
+   ```
+   auth.users
+     → ae_platform.user_roles.auth_user_id
+     → biz_001.teacher_assignments.auth_user_id (where wired)
+     → biz_001.entities.metadata.auth_user_id
+   ```
 
-5. ae_platform.user_roles.business_id is TEXT, not UUID (added 2026-05-08).
-   The get_user_role() function casts ur.business_id::uuid in its JOIN
-   to ae_platform.businesses(id) — the cast is required because the
-   columns are different types. Rule #1 above says "business_id is UUID
-   in ae_platform tables" — that's true for ae_platform.businesses(id)
-   but NOT for ae_platform.user_roles(business_id), which is TEXT.
+4. **`agent_signals_all` is the moat-feed read surface.** Each `biz_XXX` schema has `agent_signals_all` as a view UNIONing `agent_signals` (live) and `agent_signals_archive`. The future Layer 3 aggregation pipeline reads from this view, not the underlying tables directly. `ae_intelligence` currently has 4 scaffolded tables but no pipeline functions/triggers — moat aggregation activates when a second school enters the pipeline.
 
-## RLS role values
-Stored lowercase in ae_platform.user_roles ('principal', 'teacher', 'parent', 'student').
-get_user_role() returns title case via INITCAP(). Policies check against title case. INITCAP is the SINGLE translation layer — never toLowerCase() anywhere else.
+5. **`ae_platform.user_roles.business_id` is TEXT, not UUID.** Rule #1 says "business_id is UUID in ae_platform tables" — that's true for `ae_platform.businesses(id)` but NOT for `ae_platform.user_roles(business_id)`, which is `text`. `get_user_role()` casts `ur.business_id::uuid` in its JOIN. Required because columns are different types.
 
-## Wiring status
+### INITCAP + underscore role names (LANDMINE — learned via B-30, 2026-05-12)
+`INITCAP('admin_team')` returns `'Admin_team'` (lowercase t), NOT `'Admin_Team'`. M017 originally hardcoded `'Admin_Team'` (capital T) in policy bodies — silently filtered all rows for admin_team users. M019 fixed it. **Any role string with underscores must be hardcoded with the correct case in RLS policies — never rely on INITCAP for these in your head.**
 
-- **Stage 1 (DONE, 2026-04-20):** Supabase client (`db`) initialised at top of Babel block via `AGENTEDGE_CONFIG`. UMD build loaded from jsDelivr. Default schema = `biz_001`.
-- **Stage 2 (DONE, 2026-04-25):** LoginScreen rewired to `db.auth.signInWithPassword`. Role derived from `db.rpc('get_user_role')` (function lives in `biz_001`, not `ae_platform` as originally assumed — schema override is NOT needed). Teachers also query `teacher_assignments` for class/section scoping. All role strings are title-case throughout (INITCAP is the single translation layer — never toLowerCase()). Demo credentials + role-selector deleted.
-- **Stage 3 (DONE, 2026-04-26):** Session restore via `db.auth.getSession()` on App mount + `onAuthStateChange` subscription for cross-tab sign-out propagation. Deadlock fix applied (see Technical rules).
-- **Stage 4 (DONE, 2026-05-02):** AttendanceTab in `AdminPanel` rewired to `biz_001.attendance`. Period-level grid (Date + Period 1–7 weekdays / 1–4 Saturday / hidden Sunday). 5-status buttons (Present / Absent / Late / Half Day / Leave) — exact CHECK constraint casing. Upsert via `onConflict: 'student_id,date,period_number'`. Teacher sees own class/section via `assignment` prop; Principal sees all (read-only, no edit buttons). All 6 browser tests passed (T1–T6); 18 test rows live in DB; RLS verified. PR #1 merged to main. 7-field minimal upsert pattern locked. Leave-guard dialog ref-based pattern locked. Two schema corrections caught during T1 — see Schema Reality Notes (entities.auth_user_id, student_profiles dual FK).
-- **Stage 5 (DONE, 2026-05-06):** ✅ MarksTab in `AdminPanel` live-wired to `biz_001.marks`. Replaces previous mock UI (~860 lines added).
-  - Three branches: A (fresh entry, 0 dates) / B (silent load + edit, 1 date) / C (date picker with auto-detected `(make-up)` label on minority-row date, 2+ dates)
-  - Ref-based leave-guard pattern (`dirtyCountRef`) — fixes stale-closure on tab/picker changes. Same pattern still owed for AttendanceTab in pre-Wave-1.
-  - Save-only-dirty upsert; 5-priority validation precedence (range / max sanity / non-numeric / empty-not-Absent / pristine)
-  - Make-up modal auto-filters to students absent on the primary exam (UX refinement vs original spec)
-  - T1–T6 all PASSED. Merged via PR #2 → main commit `b883c74`.
-- **Stage 6 (NEXT after Stage 5):** Parent + Student views, read-only, faster than Stage 5 (~1–2 days). Parent-student linkage may need to be promoted to many-to-many table. Read-only on Parent dashboard means no save buttons, no edit grid; same `metadata->>auth_user_id` pattern for role resolution.
-- **Stage 7 (FUTURE):** AgentEdge Unified (agentedge_unified.html) wired to Supabase. 8 agents + Mitra. Separate Vercel project. ~3–5 days estimated; budget 6–8 days realistically. Needs 4 missing tables built first: `fees`, `admissions`, `staff_attendance`, `communication_logs`. Genuinely new territory — bring Web Claude back for planning. School owner Stephen logs into this dashboard, not the portal.
-- agentedge_unified.html: separate repo decision pending; currently sits outside School_Portal.
+### SQL Editor bypasses RLS (LANDMINE — recurring)
+Seeing data in the Supabase SQL Editor (postgres role) does NOT prove the app can read it. RLS audit must happen before wiring agents, not after discovering silent failures. Run the full coverage audit upfront, don't discover gaps reactively. Reference query:
 
-## Pre-Wave-1 hardening backlog
-1. ✅ **CLOSED 2026-05-07:** Class normalisation audit across remaining tables. 39 rows updated across 3 tables (`biz_001.attendance` 29, `biz_001.fee_structure` 4, `biz_001.teacher_subjects` 6 — all `'Class 9'` → `'9'`). Captured in migration 007.
-2. ✅ **CLOSED 2026-05-07:** AttendanceTab hardening. Original description ("stale-closure audit") was misleading — verified bug was missing `beforeunload` guard (tab-close data loss). Fix added `hasUnsavedRef` mirror + `beforeunload` handler, mirroring MarksTab `dirtyCountRef` pattern. Commit `584c8c5`.
-3. `teacher_subjects` full rebuild with real teacher-subject assignments from Stephen (current rows are partly orphaned; only Ramesh's row was repointed). **Stephen-blocked.**
-4. Auth credential creation for TCH002-TCH007 — 2 of 8 teachers (PRIN001 + TCH001-TCH007) have auth. **UAT-gated; designed but execution deferred.**
-5. ✅ **CLOSED 2026-05-07:** Marks save error handling. Both upsert sites in MarksTab (~index.html L1383 primary, ~L1513 make-up) now log structured `{code, message, details, hint}` to console + show diagnostic code suffix in user message. Replaces misleading "you may no longer be assigned to this class" copy with neutral "Couldn't save — your access may have changed." Commit `e84ba07`.
-6. ✅ **CLOSED 2026-05-08:** Make-up date picker UX — helper text below input lists already-used dates from `availableDates`; duplicate-date error message now names the conflicting date. Commit `fc48ad6`. Drift correction: original framing "disable already-used dates" was partially mis-described — save-time validation already existed at L1495; the gap was UX feedback.
-7. ✅ **CLOSED 2026-05-08:** Constrain make-up date input — added `max={todayLocalISO}` to date input. Browser-enforced (no future dates). Commit `fc48ad6`.
-8. ✅ **CLOSED 2026-05-08:** `Sel` component falsy-value handling. Replaced `||` with `??` in three places inside `options.map(...)` so legitimate `0` and `""` values pass through. Tagged `[LATENT-BUG]` — all 4 current callers (Period, Student, Category, Icon) verified safe; fix is defensive against future regression. Commit `5e8c790`.
-9. ✅ **CLOSED 2026-05-07:** `biz_001.log_audit()` function fix. Original description ("NEW.business_id vs OLD") was misleading — real bug was UPDATE branch losing OLD data because `TG_OP IN ('DELETE')` only included DELETE. Fix expanded to `TG_OP IN ('UPDATE', 'DELETE')`. Captured in migration 007.
-10. ✅ **CLOSED 2026-05-08:** Added 10 missing columns to `biz_001.student_profiles` via migration 008. Columns: roll_number, gender [DPDP], photo_url, admission_date, fee_category, transport_mode, previous_school, disability_status [DPDP], academic_year, enrollment_status (NOT NULL DEFAULT 'enrolled'). Drift correction: original spec listed "status" — renamed to `enrollment_status` because `entities.status` already exists. student_profiles now has 23 columns (was 13). Commit `11b3426`.
-11. ✅ **CLOSED 2026-05-08:** DELETE-on-parent discipline rule expanded into Process discipline section (see "DELETE-on-parent discipline").
-12. ✅ **CLOSED 2026-05-08:** Same-tab login duplicate fetch fix. Original description ("redundant auth restore on F5") was misleading — App-level F5 path is clean (`INITIAL_SESSION` already ignored). Verified bug fires on fresh same-tab login: `LoginScreen.handleSignIn` fetches role + teacher_assignments; `signInWithPassword` triggers `SIGNED_IN`; App's `onAuthStateChange` refetches the same data. Fix mirrors AttendanceTab `hasUnsavedRef` pattern: `roleRef` mirrors role state via separate `useEffect`; `SIGNED_IN` handler skips refetch when `roleRef.current !== "Student"` (cross-tab login still works). Commit `c7a9bdc`.
-13. ✅ **CLOSED 2026-05-07:** Drop `biz_002.user_roles` — architectural drift cleaned; table dropped (was empty scaffolding). Captured in migration 007.
-14. ✅ **CLOSED 2026-05-08:** `agent_signals_all` investigation complete. Confirmed per-schema view UNIONing `agent_signals` (live) + `agent_signals_archive`; pattern consistent across all 4 business schemas. Strategic reframe during investigation: this is also the read surface for the moat aggregation pipeline. ae_intelligence schema has 4 scaffolded tables (`signal_aggregates`, `cross_signal_patterns`, `benchmarks`, `health_score_inputs`) but no pipeline functions/triggers/scheduled jobs — moat aggregation = post-go-live work (activates at second school). See new architectural rule #4 in Schema architectural rules section.
-15. Audit `biz_003` (Bhargavi Developers) and `biz_004` (Printing Press) schemas for `user_roles` drift. **Deferred — other verticals; revisit when those businesses activate.**
-16. ✅ **CLOSED 2026-05-08:** Created `biz_001.teacher_profiles` table via migration 009 (Path A: mirror `student_profiles` shape). 15 columns: id, business_id, entity_id, employee_code, joining_date, qualifications, employment_type, photo_url, gender [DPDP], date_of_birth [DPDP], blood_group, employment_status (NOT NULL DEFAULT 'active'), metadata, created_at, updated_at. Plus index `idx_teacher_profiles_entity_id`. Drift correction: original spec called this "asymmetry" — on verification, no `teacher_profiles` table existed at all. Reframed and resolved. Commit `b10dbb8`.
-17. Email convention reconciliation — `auth.users` uses test pattern; `biz_001.entities` use real school emails. **Deferred until Stephen confirms domain.**
-18. ✅ **CLOSED 2026-05-08:** `get_user_role()` function body verified clean. Function correctly scopes by `auth.uid()` AND `b.schema_name = 'biz_001'`; INITCAP role-case convention holds. No code change needed.
-19. Backfill migrations 000-006 from live Supabase to repo. CLAUDE.md migration log references migrations 000-006 by name, but only 007, 008, 009 exist as files in `sql/`. Reconstruct missing migrations from live Supabase schema state for full audit trail and idempotent re-run capability.
+```sql
+SELECT tablename, policyname FROM pg_policies
+WHERE schemaname='biz_001' AND policyname LIKE '%admin_team%';
+```
 
-**Pre-Wave-1 backlog: 5 open + 14 closed = 19 items tracked (as of 2026-05-08).**
+This caught B-33 (entities table had no admin_team policy → silent 0-row return for StaffPulse).
 
-Open items: #3 (Stephen-blocked), #4 (UAT-gated), #15 (other verticals — deferred), #17 (domain-gated), #19 (migrations backfill — execution deferred).
+## Migration Log
 
-## Wave 2 / Stage 4 deferred UX backlog
-- **Principal read-only view:** Hide edit controls post-Stage 4 (currently functional via assignment=null path; refine UI affordances).
-- **Class Teacher vs Subject Teacher granular permissions:** Needs `teacher_subject_assignments` table — overlaps with the `teacher_subjects` table that already exists; reconcile during Stage 7.
-- **Attendance rewrite future direction:** Daily per-student view, not percentage (already done in Stage 4).
-- **Tabular student layout with inline edit grid for Teacher and Principal dashboards:** Carry over to MarksTab via current Stage 5 design.
-- **Future-date attendance:** Currently allowed (no UI restriction). Flag for Stephen if blocking is desired.
+All migrations live in `sql/` in this repo. **Several migrations (M016, M017, M018, M019, M020, M021) actually serve AgentEdge Unified agents but live here because both products share `biz_001`. Backlog item B-42 (LOW) tracks a possible repo split — not urgent.**
 
-## Open non-technical items
-- **Lawyer call (PARKED but URGENT):** DPA + Privacy Notice drafting. Hard gate before Wave 1 migration. The longer this slips, the more it constrains May 10 to June 1 path. (User has explicitly chosen to leave the lawyer call out of current technical-track conversations; flag in build logs.)
-- **Stephen call:** Lock May 10 as data delivery date. Confirm Saturday period count practical usage. Confirm Half Day vs Leave usage in practice. Resend data template with explicit deadline.
-- **Domain purchase:** School-relevant TLD (e.g. ststephens.school or pathshala.school). Blocks marketing site.
-- **Pricing decision:** Rs.15 vs Rs.35 entry pricing question outstanding from Apr 24. Doesn't block tech work but blocks pilot agreement, marketing site copy, CA pitch.
-- **Marketing site:** Overdue ~11+ days. One page, screenshots, pricing, "Book a Demo" wa.me link.
-- **CA firm coffee:** First conversation must happen this week. No closing in May, just relationship start.
-- **Pilot agreement with Stephen:** Sign once pricing locked.
+| # | File | Date | Purpose | Closes |
+|---|---|---|---|---|
+| 000 | `000_baseline.sql` | 2026-04 | Full schema baseline pg_dump (~187KB, 6 schemas, 65 tables). Stands in for individual M001–M006 which were never repo'd as standalone files. | Pre-Wave-1 #19 (partial — accepted baseline approach over backfilling 6 separate files) |
+| 007 | `007_pre_wave_1_cleanup_part_1.sql` | 2026-05-07 | Class normalisation (39 rows across 3 tables); drop empty `biz_002.user_roles`; fix `log_audit()` UPDATE branch losing OLD data | Pre-Wave-1 #1, #9, #13 |
+| 008 | `008_pre_wave_1_cleanup_part_2.sql` | 2026-05-08 | Add 10 columns to `student_profiles` (incl. DPDP-gated `gender`, `disability_status`). Table grew 13 → 23 columns. | Pre-Wave-1 #10 |
+| 009 | `009_pre_wave_1_cleanup_part_3.sql` | 2026-05-08 | Create `biz_001.teacher_profiles` (15 columns, mirrors `student_profiles` shape) | Pre-Wave-1 #16 |
+| 010 | `010_communication_preferences.sql` | 2026-05 | New table — parent communication channel preferences | — |
+| 011 | `011_communication_logs.sql` | 2026-05 | New table — outbound communication audit trail | — |
+| 012 | `012_fee_summary.sql` | 2026-05 | New table — derived fee summary per student | — |
+| 013 | `013_staff_attendance.sql` | 2026-05 | New table — staff daily attendance | — |
+| 014 | `014_staff_period_attendance.sql` | 2026-05 | New table — staff period-level attendance | — |
+| 015 | `015_admissions.sql` | 2026-05 | New table — admissions pipeline (drives AdmissionRadar agent) | — |
+| 016 | `016_admin_team_role.sql` | 2026-05-11 | Add `admin_team` to `ae_platform.user_roles` CHECK; legacy `admin` preserved | B-10 |
+| 017 | `017_rls_policies_new_tables.sql` | 2026-05-11 | 18 RLS policies across M010–M015 tables. **Had INITCAP bug — hardcoded `'Admin_Team'` (wrong case).** | (introduced B-30) |
+| 018 | `018_admin_team_transport_rls.sql` | 2026-05-12 | admin_team SELECT policies on `transport_routes`, `transport_stops`, `student_transport` (required for RouteWatch). **Serves AgentEdge Unified.** | — |
+| 019 | `019_fix_initcap_admin_team_policies.sql` | 2026-05-12 | Fix M017 INITCAP bug — replace `'Admin_Team'` with `'Admin_team'` | B-30 |
+| 020 | `020_admin_team_rls_entities.sql` | 2026-05-12 | admin_team SELECT policy on `entities` (silent 0-row landmine discovered during StaffPulse smoke test). **Serves AgentEdge Unified.** | B-33 |
+| 021 | `021_admin_team_rls_broad_sweep.sql` | 2026-05-12 | Broad admin_team RLS sweep for `biz_001` (21 policies added). Catch-all to prevent further silent landmines. **Serves AgentEdge Unified.** | — |
+| 022 | `022_seed_student_data.sql` | 2026-05-16 | Seed 8 Class 9A students (STU001–STU008) | — |
+| 023 | `023_backfill_not_submitted.sql` | 2026-05-16 | Backfill `homework_submissions` with 'Not Submitted' rows for existing homework | — |
+| 024 | `024_homework_submission_autocreate_trigger.sql` | 2026-05-16 | Trigger on `homework` INSERT that auto-cascades a `homework_submissions` row per enrolled student in the target class. Validated end-to-end via Stage 6 UI insert. | — |
+
+## Open Backlog
+
+### Pre-Wave-1 hardening (5 open of 19 total)
+- **#3** `teacher_subjects` full rebuild with real teacher-subject assignments. **Stephen-blocked.**
+- **#4** Auth credentials for TCH002–TCH009 (8 teachers). Only PRIN001 + TCH001 have working auth. **UAT-gated.**
+- **#15** Audit `biz_003` and `biz_004` for `user_roles` drift. Deferred until those businesses activate.
+- **#17** Email convention reconciliation — `auth.users` uses test pattern; `entities` use real school emails. **Domain-gated.**
+- **#19** Backfill missing migrations 001–006 from live Supabase to repo as standalone files. **Partially closed via M000 baseline approach.** Outstanding question: individual files or baseline sufficient? Decision deferred.
+
+### Recent items (B-XX series)
+- **B-10** Legacy `admin` role in user_roles CHECK preserved alongside `admin_team`. ✅ Captured in M016.
+- **B-30** M017 INITCAP `'Admin_Team'` (wrong case). ✅ Closed by M019.
+- **B-33** `entities` table missing admin_team policy → silent 0-row return for StaffPulse. ✅ Closed by M020.
+- **B-37** admin password committed in `AgentEdge_Unified` repo (separate private repo). Not active exposure but bad hygiene. **OPEN.**
+- **B-40** Add `homework_id` to relevant `agent_signals` payload for Wave A homework-signal consumption. ~10 min. **OPEN.**
+- **B-41** Backfill `roll_number` on 8 seed students (currently NULL). Cosmetic. **OPEN.**
+- **B-42** Consider a separate `Agentedge/Supabase_Migrations` repo (SQL currently mixed with Pathshala UI in this repo). **LOW.**
+- **B-43** Parent + Student READ-only homework views (Phase 2 add). **MEDIUM, OPEN.**
+- **B-44** Add success/error styling distinction to `showToast` (currently identical). Cosmetic. **OPEN.**
+
+### Deferred UX (post-Stage 4, low-priority)
+- Principal read-only view: hide edit controls more cleanly post-Stage 4
+- Class Teacher vs Subject Teacher granular permissions (overlaps with `teacher_subjects` table; reconcile during AgentEdge Unified wiring)
+- Tabular student layout with inline edit grid for Teacher and Principal dashboards
+- Future-date attendance: currently allowed (no UI restriction). Flag for Stephen if blocking is desired.
+
+## Strategic Flags
+
+- **S-1: Supabase free-tier auto-pause = go-live blocker.** Free projects auto-pause after ~7 days idle. Caused "Failed to fetch" during Stage 6 smoke test (May 28). For live school usage, need paid tier (~$25/mo). Must upgrade before go-live.
+- **S-2: `showToast` hardcoded "8 students assigned"** in the Stage 6 homework-create flow. Works for Class 9A's 8 students; will mislead when real class sizes vary. Make dynamic post-Wave-1.
+
+## Open Non-Technical Items
+- **Lawyer email (PARKED but URGENT):** DPA + Privacy Notice drafting under DPDP Act 2023 (children's data). Hard gate before Wave 1 migration. Deferred >16 days.
+- **Stephen call:** lock data delivery date. Confirm Saturday period count practical usage. Confirm Half Day vs Leave usage. Resend data template with hard deadline.
+- **Domain purchase:** school-relevant TLD (e.g. `ststephens.school` or `pathshala.school`). Blocks marketing site + production URL.
+- **Marketing site:** one page, screenshots, "Book a Demo" `wa.me` link. Long-deferred.
+- **CA firm coffee:** first conversation. No closing in May; relationship start only.
+- **Pilot agreement with Stephen:** sign once pricing locked.
 - **Real Class 9 student data collection from Stephen:** Excel template returned with sample rows only as of Apr 28; resend with hard deadline.
 
-## Path to June 1 go-live (26 days from 2026-05-06)
+## Path to June 8 Go-Live (10 days from 2026-05-29)
 
 | Window | Work |
 |---|---|
-| This week (May 6–12) | Pre-Wave-1 hardening + non-technical critical path (lawyer call for DPA/Privacy Notice, Stephen call to lock May 10 data delivery, domain purchase, Supabase Pro decision) |
-| Week 2 (May 13–19) | Wave 1 migration if data is in + Stage 6 HomeworkTab build |
-| Week 3 (May 20–26) | UAT rounds 1 & 2 + teacher training + parent WhatsApp setup |
-| Week 4 (May 27–June 1) | Dress rehearsal + GO-LIVE June 1 |
+| Today–May 31 | Verify Stage 6 production deploy. Send lawyer email (DPA + Privacy Notice). Stephen call to lock data delivery + Saturday/Half-Day usage. Domain purchase. Supabase Pro upgrade (S-1). |
+| June 1–3 | Wave 1 migration if Stephen data is in. Provision auth credentials for TCH002–TCH009. |
+| June 4–5 | UAT round 1: 2 teachers + 3 parents on real data. Fix bug list. |
+| June 6–7 | Teacher training. Parent WhatsApp onboarding. Dress rehearsal. |
+| June 8 | GO-LIVE — Pathshala Portal for St. Stephen's School. |
 
-Sequence: Pre-Wave-1 hardening - DPA signed (legal gate) - Wave 1 migration - Stage 6 HomeworkTab - UAT - dress rehearsal - June 1.
+**Critical path:** lawyer email → DPA signed → Wave 1 migration → UAT → go-live. Stephen data delivery is the gating dependency.
 
-## Working style (locked)
-- **Hand-holding mode (locked 2026-04-29):** One sub-step at a time. Plain English explanation BEFORE showing code. Line-by-line breakdown of code/SQL longer than 5 lines. Query deployed state before writing code that touches it. Call out trade-offs explicitly, invite pushback. Pause for confirmation on destructive actions (TRUNCATE, DROP) before running.
+## Working Style (LOCKED)
+- **Hand-holding mode (locked 2026-04-29, reinforced 2026-05-28):** One sub-step at a time. Plain English explanation BEFORE showing code. Line-by-line breakdown of code/SQL longer than 5 lines. Query deployed state before writing code that touches it. Call out trade-offs explicitly, invite pushback. Pause for confirmation on destructive actions (TRUNCATE, DROP) before running.
 - **CTO cross-questioning:** Before approving major architectural moves (new stages, schema changes, security decisions, scope expansions), ask comprehension-check questions. Pair with active assumption-surfacing — name assumptions explicitly before they become mistakes.
 - **Communication tone:** Simple, plain language. No jargon density. Everyday analogies (hotel keys, conference rooms, walking between buildings). Short responses, short sentences. Define technical terms in one line before using. Default to simple mode; deep-dive only when explicitly requested.
-- **Database concepts (as of April 2026):** Bhargav is learning database fundamentals hands-on. All Supabase and SQL concepts are relatively new. Anchor every teaching moment to AgentEdge-specific examples.
+- **Database concepts:** Bhargav is learning database fundamentals hands-on. All Supabase and SQL concepts are relatively new. Anchor every teaching moment to AgentEdge-specific examples.
 
-## Process discipline
+## Process Discipline
 
-### Verify before write (learned 2026-04-16)
-Before writing SQL or code that references a table, ALWAYS query the actual deployed schema first (information_schema.columns, pg_constraint). Design documents have been wrong often enough that trusting them leads to long debug loops. Verify then write.
+### Verify before write (2026-04-16)
+Before writing SQL or code that references a table, ALWAYS query the actual deployed schema first (`information_schema.columns`, `pg_constraint`). Design documents have been wrong often enough that trusting them leads to long debug loops.
 
-### Full audit before structural change (learned 2026-05-03)
-Before any DROP, ALTER, RENAME, or other structural change to an existing table, run the **full 8-query audit**. Verifying columns alone is NOT enough. The audit:
+### Full audit before structural change (2026-05-03)
+Before any DROP, ALTER, RENAME, or other structural change to an existing table, run the **full 8-query audit**:
 
-1. **Columns** — `information_schema.columns` filtered to schema + table
-2. **Constraints** — `pg_constraint` joined for check, unique, FK, and PK definitions
-3. **Foreign keys pointing INTO the table** — `information_schema` joins on `constraint_column_usage`
-4. **RLS policies referencing the table** — `pg_policies` filtered with `qual LIKE '%table_name%'`
-5. **Indexes** — `pg_indexes` filtered to schema + table
-6. **Triggers** — `information_schema.triggers` filtered to schema + table
-7. **Views depending on the table** — `pg_views` filtered with `definition LIKE '%table_name%'`
-8. **Functions/procedures referencing the table** — `pg_proc` filtered with `prosrc LIKE '%table_name%'`
+1. **Columns** — `information_schema.columns`
+2. **Constraints** — `pg_constraint` (check, unique, FK, PK)
+3. **Foreign keys pointing INTO the table** — `information_schema.constraint_column_usage`
+4. **RLS policies referencing the table** — `pg_policies` (qual + with_check)
+5. **Indexes** — `pg_indexes`
+6. **Triggers** — `information_schema.triggers`
+7. **Views depending on the table** — `pg_views` (definition LIKE)
+8. **Functions/procedures referencing the table** — `pg_proc` (prosrc LIKE)
 
-Empty results are still verified results. Do not skip a query because "it's probably empty." The point of the audit is to verify, not to assume.
+Empty results are still verified results. Do not skip a query because "it's probably empty."
 
-The 2026-05-03 incident: tried to DROP `student_profiles` to recreate it with extra columns. DROP failed safely because 6 RLS policies depended on it (entities_teacher_select, teacher_subjects_parent_select, teacher_subjects_student_select, homework_parent_select, homework_student_select, house_points_teacher_all) — plus 3 dependent tables that weren't on our radar (teacher_subjects, homework, house_points). Had `CASCADE` been used, all 6 policies would have been silently destroyed. PostgreSQL caught it. The audit rule ensures we catch it next time.
+### View CLAUDE.md fresh from main before editing (2026-05-03)
+Always `git checkout main && git pull && cat CLAUDE.md` before proposing edits. Do NOT trust pasted content from a chat as authoritative — older sessions on feature branches may have stale copies. Lessons accumulate across sessions; editing from a stale base overwrites recent additions.
 
-### Always view CLAUDE.md fresh from main before editing (learned 2026-05-03)
-When proposing edits to CLAUDE.md, always run `git checkout main && git pull && cat CLAUDE.md` first to see the actual current contents. Do NOT trust pasted content from a chat as authoritative — older sessions on feature branches may have stale copies. Lessons accumulate in CLAUDE.md across sessions, and editing from a stale base risks overwriting recent additions. The 2026-05-03 incident: started drafting CLAUDE.md edits based on a copy from the `stage-1-to-4-supabase-wiring` branch; pulling main brought down 133 lines of CLAUDE.md content from a separate session that hadn't been visible. Always pull main and `cat` first.
+### Class normalisation is cross-cutting (2026-05-06)
+Every table with a `class` column requires auditing. Discovered across 4 separate tables during Pre-Wave-1; assume the next vertical (caterers, developers, printing) will have its own analog.
 
-### Class normalisation is a cross-cutting discipline (learned 2026-05-06)
-Class normalisation is a cross-cutting data-quality discipline. 4th occurrence today (`subjects`, `teacher_assignments`, `student_profiles`, `teacher_subjects`). Every table with a `class` column requires auditing.
+### DELETE-on-parent discipline (2026-05-06 / expanded 2026-05-08)
+Before any DELETE on a parent table (any table whose `id` is referenced by columns in other tables):
 
-### DELETE-on-parent discipline (learned 2026-05-06, expanded 2026-05-08 via Pre-Wave-1 #11)
-Before any DELETE on a "parent" table — defined as any table whose `id` is referenced by columns in other tables — execute these steps in order:
+1. Query for dependents in each candidate child table.
+2. Decide explicit handling per dependent set: CASCADE / SET NULL / RESTRICT / manual cleanup.
+3. **Many of our tables LACK FK constraints** — Postgres will not prevent or cascade automatically. Silent orphans are the default. Plan accordingly.
+4. Document the decision in the migration script before executing.
+5. If unsure, RESTRICT first. Safer to fail than silently orphan.
 
-1. **Query for dependents.** For each candidate dependent table, run this SQL pattern (replacing the placeholders):
+Original incident: `subjects` re-seed left orphaned `subject_id`s in `teacher_subjects`, which broke the RLS chain at `marks` INSERT — ~2 hours of misdirected debugging.
 
-       SELECT * FROM <child_schema>.<child_table>
-       WHERE <fk_column> = '<parent_row_id>';
+### Save-side error messages must surface real DB error code (2026-05-06)
+Generic JS guesses obscure root cause. Log structured `{code, message, details, hint}` to console; surface diagnostic code suffix in user message. The day this rule was added, "no longer assigned to this class" hid an RLS 42501 rejection and cost ~2 hours.
 
-   Empty result = no dependents = safe. Non-empty result = step 2.
+### Schema-sensitive facts get verified by query, not by build-log re-read (2026-05-07)
+Build log claims about schema state (table location, column type, row counts, FK relationships) cannot be trusted at face value. Always run an `information_schema` query against the live database before writing code that depends on schema facts. Two corrections were made on 2026-05-07 because of this — both cost 30+ minutes each.
 
-2. **Decide explicit handling for each dependent set:**
-   - **CASCADE** — delete dependents along with parent. Use only when dependents have no value without parent.
-   - **SET NULL** — detach dependents but keep them. Use when dependents should survive.
-   - **RESTRICT** — refuse the DELETE if dependents exist. Forces explicit cleanup first.
-   - **Manual cleanup** — handle dependents in a separate step before parent DELETE.
-
-3. **Many of our tables LACK FK constraints** (a future "tighten FKs" migration is on the deferred list). Without FK enforcement, Postgres will NOT prevent or cascade automatically — silent orphans are the default. Plan accordingly.
-
-4. **Document the decision in the migration script** before executing.
-
-5. **If unsure, RESTRICT first.** Safer to fail than to silently orphan.
-
-Original incident (2026-05-06): `subjects` re-seed left orphaned `subject_id`s in `teacher_subjects`, which broke the RLS chain at `marks` INSERT — caused ~2 hours of misdirected debugging. Rule was added that day, then expanded to current form on 2026-05-08 as part of Pre-Wave-1 #11 closure.
-
-### Save-side error messages must surface real DB error code (learned 2026-05-06)
-Save-side error messages must surface real DB error code and message. Generic JS guesses obscure root cause; today's "no longer assigned to this class" hid an RLS 42501 rejection and cost ~2 hours of misdirected debugging.
-
-### Schema-sensitive facts get verified by query, not by build-log re-read (learned 2026-05-07)
-Schema-sensitive facts get verified by query, not by build-log re-read. Build log claims about schema state (table location, column type, row counts, FK relationships) cannot be trusted at face value. Always run an `information_schema` query against the live database before writing code that depends on schema facts. Two corrections were made on 2026-05-07 because of this — both cost 30+ minutes each.
-
-### Re-verify backlog items against live state before working them (learned 2026-05-08)
-When picking up a Pre-Wave-1 backlog item to work on, do NOT trust the description as written in CLAUDE.md or in build logs. Re-verify against the live system before designing any fix. Verification methods in priority order:
-1. **Direct query** against the live database (`information_schema`, `pg_class`, etc.) or live file (`sed`/`grep` on the actual code).
-2. **Fresh read** of the relevant code section, not a paraphrase from a build log.
-3. **Most recent commit message** for that area of the code.
+### Re-verify backlog items against live state before working them (2026-05-08)
+When picking up a backlog item, do NOT trust the description as written in CLAUDE.md or build logs. Re-verify against the live system first. Methods in priority order:
+1. Direct query against live DB or live file (`sed`/`grep` on the actual code).
+2. Fresh read of the relevant code section, not a paraphrase from a build log.
+3. Most recent commit message for that area.
 
 **Forbidden:** verifying by re-reading the build log entry that originally captured the item — that's circular verification and doesn't catch drift between capture-time and now.
 
-Five Pre-Wave-1 items in the May 6-8 sweep had partially-misleading or outdated descriptions discovered only via this re-verification:
-- #2 ("stale-closure" → real bug was missing `beforeunload`)
-- #6 ("disable already-used dates" → save validation already existed; gap was UX hint)
-- #9 ("NEW vs OLD business_id" → real bug was UPDATE branch losing OLD data)
-- #12 ("F5" → real bug fires on fresh same-tab login, not F5)
-- #16 ("asymmetry" → table didn't exist at all)
+Five Pre-Wave-1 items had partially-misleading descriptions caught only via re-verification (#2, #6, #9, #12, #16). Without this rule, all five would have been worked from incorrect designs.
 
-Without this rule, all five would have been worked from incorrect designs.
+### RLS audit before wiring agents (2026-05-12)
+Run the full admin_team coverage audit before wiring any agent in AgentEdge Unified. Do not discover gaps one at a time. Two silent landmines hit on the same sweep (B-30, B-33) — both would have been caught upfront by the coverage query.
 
-## Architectural decisions (locked, do not re-litigate)
+### Credential hygiene
+Never echo real credential values in diffs. Store in named config objects (`AGENTEDGE_CONFIG`), never loose constants. Never commit real credentials to repo (see B-37 — still open in `AgentEdge_Unified` repo).
 
-- **Schema-per-business, not row-per-business.** Each pilot business gets its own schema (biz_001 through biz_004). Bug isolation, DPDP right-to-erasure simplicity.
+## Architectural Decisions (LOCKED — do not re-litigate)
+
+- **Schema-per-business, not row-per-business.** Each pilot business gets its own schema. Bug isolation, DPDP right-to-erasure simplicity.
 - **Universal field naming:** `business_id`, not `school_id`, for cross-vertical universality.
-- **Two-layer agent naming:** DB stores Pulse names (universal); UI shows industry names (FeeAlert, etc.).
-- **Single parent_id per student.** Mother and father share one parent ID per child. If they have two children, two parent IDs. Many-to-many promotion deferred to Stage 6.
-- **Dedicated tables for high-frequency operational data** (attendance, marks, homework, homework_submissions, performance_observations, house_points, transport, fee_structure, fee_payments, subjects, teacher_subjects, academic_calendar). Universal `events` table still exists for generic activity.
+- **Two-layer agent naming:** DB stores Pulse names; UI shows industry names.
+- **Single `parent_id` per student.** Mother and father share one parent ID per child. Many-to-many promotion deferred to post-launch.
+- **Dedicated tables for high-frequency operational data** (attendance, marks, homework, etc.). Universal `events` table still exists for generic activity.
 - **Mumbai region (ap-south-1) Supabase.** Set before project creation. Non-negotiable.
-- **Layer 3 (ae_intelligence) is the moat.** Anonymised aggregates only. Never exposed to clients.
-- **Agents must work with incomplete data.** Indian SME owners give 60–70% of truth initially. If agents break with partial data, never reach Trust Stage 2.
-- **GTM constraint:** Telugu AI tutor content tied to SCERT syllabus. Limits school product to Telangana state board for now. CBSE/ICSE need additional content builds.
-- **Sales motion:** Demo on phone - pilot agreement - Excel data template - portal live within one week - conversion at day 30.
-- **Emotional hook vs. business case:** 3-minute demo leads with Telugu AI tutor study tab (emotional hook for parents/students). AgentEdge intelligence agents are the business case for the school owner.
-- **Bootstrap discipline:** No fundraising until 25 SMEs are live. Target exit valuation improves significantly at 100 SMEs vs. 25.
-- **One feature branch per stage.** stage-N-short-description naming.
+- **Layer 3 (`ae_intelligence`) is the moat.** Anonymised aggregates only. Never exposed to clients.
+- **Agents must work with incomplete data.** Indian SME owners give 60–70% of truth initially. If agents break with partial data, they never reach Trust Stage 2.
+- **Sales motion:** Demo on phone → pilot agreement → Excel data template → portal live within one week → conversion at day 30.
+- **Emotional hook vs. business case:** 3-minute demo leads with Telugu AI tutor (emotional hook for parents/students). AgentEdge intelligence agents are the business case for the school owner.
+- **One feature branch per stage.** `stage-N-short-description` naming.
 - **Plan-then-diff-then-write discipline.** Web Claude plans + drafts; Claude Code applies + tests. Never compress this loop.
-- **Stage 4 patterns to carry forward:** 7-field minimal upsert (send only what we control, let DB defaults handle the rest); leave-guard dialog via useRef (not lifted state); resolve teacher entities.id once on tab mount; class+section filter on every query.
+- **Stage 4 patterns to carry forward:** 7-field minimal upsert (send only what we control, let DB defaults handle the rest); leave-guard dialog via `useRef` (not lifted state); resolve teacher `entities.id` once on tab mount; class+section filter on every query.
+- **`tools/core/` is a pending Python initiative, NOT a SQL migration.** Intended as a shared library (`schema.py`, `emitters.py`, `validators.py`, `output.py`) for mock data generation + future client data importers. Will live in a `tools/` folder when built, not `sql/`. Status: scoped, not implemented.
 
-## Tools, environment, infrastructure
+## Tools & Environment
 
-- **Repo:** github.com/Agentedge/School_Portal
-- **Local working directory:** `~/agentedge/School_Portal/` on Windows + WSL2 + Ubuntu 24
+- **Repo:** `github.com/Agentedge/School_Portal` (private)
+- **Working directory:** `~/agentedge/School_Portal/` on Windows + WSL2 + Ubuntu 24
 - **Node.js:** v24.15.0
-- **Supabase:** Mumbai region (ap-south-1) — database and authentication
-- **Vercel:** Canonical deployment platform. Auto-deploys from GitHub `main` pushes. Migrated from Netlify in early days of the project.
-- **gh CLI:** Installed and authenticated. Use `gh pr create --base main --fill` for PRs.
-- **Branch model:** `main` (production), feature branches `stage-N-...` per stage.
-- **Local dev server:** `python3 -m http.server 8000` from repo root. Never serve via `file://`.
-- **Backup:** OneDrive `agentedge backup/` folder. **Backup is NOT the repo.** Never edit code in OneDrive — only edit in the live repo at `~/agentedge/School_Portal/`. The backup is downstream of the repo.
-- **DPDP Act 2023:** Key legal constraint, especially for children's data in school vertical.
-- **SCERT Telangana syllabus:** Content constraint defining serviceable school market.
-- **Lead sourcing:** UDISE+ government database + Google Maps for school outreach.
+- **Claude Code:** v2.1.138 in WSL Ubuntu
+- **Supabase:** Mumbai (ap-south-1). Project `Agentedge's-Dev`. Free tier (S-1 upgrade pending).
+- **Vercel:** Canonical deployment. Auto-deploys from GitHub `main`. Project: `school-portal`.
+- **`gh` CLI:** Installed and authenticated. `gh pr create --base main --fill` for PRs.
+- **Local dev:** `python3 -m http.server 8000` from repo root. Never `file://`.
+- **WSL Supabase quirk:** WSL2 cannot route IPv6. Use Session Pooler endpoint (`aws-1`, not `aws-0`) for `pg_dump` and direct Postgres connections.
+- **VS Code in WSL:** the `code` command is not available — use `nano` for in-terminal edits.
+- **Backup:** OneDrive `agentedge backup/`. **Backup is NOT the repo.** Never edit code in OneDrive — only in `~/agentedge/School_Portal/`. Backup is downstream of repo.
+- **DPDP Act 2023:** key legal constraint, especially for children's data in the school vertical.
+- **SCERT Telangana syllabus:** content constraint defining the serviceable school market.
 
-## Financials (know these)
-- Growth plan: Rs.6,999/mo. COGS: Rs.1,150. Gross margin: 84%.
-- LTV (24 months): Rs.1,40,376. CAC via CA firm: <Rs.5,000. LTV:CAC = 28:1.
-- Break-even: ~5 SMEs. Bootstrap to 25 SMEs before fundraising.
-- Exit at 25 SMEs: Rs.2–3 Cr expected. Exit at 100 SMEs: Rs.15–25 Cr.
-- (Per-student pricing model and revised COGS were discussed in Apr 21 Part 2 strategy session — implementation deferred until post-pilot.)
+## Next Task
 
-## Schema migration log
+**Immediate (today):** Verify Stage 6 production deploy. Visit production URL, log in as `teacher1.test`, navigate Admin → Homework, confirm "+ New Homework" button is visible. No console errors. Smoking-gun proof Stage 6 is live.
 
-### 2026-04-15 — biz_001 schema correction
-**Reason:** Validation of 7 deferred assumptions from Apr 5 schema generation. School-specific tables needed beyond the universal core.
+**Highest-leverage single move (this week):** Lawyer email — DPA + Privacy Notice drafting. Gates Wave 1 migration. Has been parked >16 days; cost of further delay is direct cost on the June 8 timeline.
 
-**Changes via 003_school_schema_correction.sql (DEPLOYED):**
-- Added 15 new tables resolving all 7 deferred assumptions: dedicated attendance/marks/homework/homework_submissions/performance_observations tables; house_points; transport_routes/transport_stops/student_transport; fee_structure + fee_payments; subjects + teacher_subjects + academic_calendar; teacher_assignments
-- Decisions locked: single parent_id per student, dedicated structured tables for high-frequency data, transport tables required for RouteWatch agent
-
-### 2026-04-16 — Wave 0 mock data + column-name correction loop
-**Reason:** Deploy operational test data; reconcile column names between design docs and actual deployed schema.
-
-**Changes:**
-- 000_prerequisites.sql DEPLOYED — foundation schemas, trigger functions, user_roles table, 5 RLS helper functions
-- 006_cleanup_student_profiles.sql DEPLOYED — dropped redundant route/stop text columns
-- 005_wave0_mock_data_v3.sql DEPLOYED — 24 entities, 8 students in Class 9/Section A, 96 attendance rows, 25 fee payments across 16 tables
-- Architecture Deviation Report identified 5 deviations between design and deployed schema; column mapping table finalised
-
-### 2026-04-18 — RLS policies + auth linkage
-**Reason:** Original 004_school_rls_policies.sql was syntax-valid but referenced wrong column names — ZERO policies were actually attached at runtime. Auth users needed end-to-end linkage.
-
-**Changes:**
-- 004_fix_rls_column_names.sql DEPLOYED — 59 RLS policies across 24 biz_001 tables using actual deployed column names (class not class_name, student_id not student_entity_id, etc.). Verified via 3 post-deploy queries.
-- 006_auth_setup.sql DEPLOYED — 4 Supabase Auth test users created and linked end-to-end. Two-part SQL: Part A dashboard instructions, Part B DO block updating entities.metadata.auth_user_id, teacher_assignments.auth_user_id, ae_platform.user_roles.
-- get_user_role() with INITCAP wrapper deployed — single point of role-case translation.
-
-### 2026-04-29 — Period-level attendance migration
-**Reason:** Stage 4 design pivoted from day-level to period-level once Stephen confirmed each subject teacher marks attendance per period (not once per day).
-
-**Changes applied to `biz_001.attendance`:**
-- TRUNCATE'd existing 96 mock rows (will be reloaded with real Class 9 data during Wave 1)
-- Added `period_number INTEGER NOT NULL` column with `CHECK (period_number BETWEEN 1 AND 7)`
-- Dropped old unique constraint `attendance_student_id_date_key` on `(student_id, date)`
-- Added new unique constraint `attendance_student_date_period_key` on `(student_id, date, period_number)`
-- Dropped old `attendance_status_check` (4 values)
-- Added new `attendance_status_check` with 5 values: `('Present','Absent','Late','Half Day','Leave')`
-
-**Verified post-migration:**
-- Column listing matches design (period_number present, INTEGER, NOT NULL)
-- Constraints listing matches design (new period CHECK, new 5-value status CHECK, new 3-column UNIQUE)
-- Old day-level UNIQUE constraint confirmed gone
-- Row count = 0 (then 18 fake test rows loaded for Stage 4 testing)
-
-### 2026-05-03 — Class 9 subjects seeded
-**Reason:** Stage 5 prep. The marks table FK requires subject_id values to exist before any marks can be inserted.
-
-**Changes applied to `biz_001.subjects`:**
-- Inserted 7 rows for Class 9: Telugu, Hindi, English, Mathematics, Physical Science, Biological Science, Social Studies
-- subject_code intentionally NULL for all 7 rows (UI will display full subject_name)
-- Default values used for business_id ('biz_001'), academic_year ('2026-27'), is_active (true)
-
-**Verified post-seed:**
-- 7 rows returned for class = '9' AND is_active = true
-- Subject names match the SCERT syllabus block in index.html (which is canonical for Class 9 study content)
-
-### 2026-05-03 — student_profiles audit (PRE-ALTER, no schema change yet)
-**Reason:** Stage 5 needs roll_number, academic_year, status (with CHECK), and 6 other optional fields on student_profiles. Initial plan was DROP + recreate. Audit caught dependencies.
-
-**Audit findings:**
-- Existing table has 13 columns (id PK, business_id, entity_id FK, parent_id FK, admission_number, class, section, house, date_of_birth, blood_group, metadata jsonb, created_at, updated_at)
-- 8 test student rows pre-seeded (Class 9 Section A) — `class` value is `'Class 9'` with prefix
-- 6 RLS policies depend on the table (named above)
-- 3 downstream tables depend on the table (teacher_subjects, homework, house_points)
-- Zero foreign keys point INTO student_profiles from other tables (Query C empty result)
-
-**Decision:** Pivot from DROP + recreate to ALTER + extend. Preserve all 6 RLS policies, all 8 rows, all 3 downstream-table relationships. Plan: ALTER ADD 9 columns; UPDATE class value 'Class 9' to '9'; ALTER ADD CHECK on status; ALTER ADD UNIQUE on (business_id, class, section, roll_number, academic_year); CREATE partial INDEX on active students. ~30 minutes work.
-
-### 2026-05-05 — business_id alignment + class normalisation + marks UNIQUE
-**Changes:**
-- `business_id` alignment across 14 tables (362 rows updated to `'biz_001'` in single transaction)
-- Class normalisation across 3 tables (`student_profiles`, `subjects`, `teacher_assignments`) — `'Class 9'` → `'9'`
-- UNIQUE constraint `marks_unique_per_student_per_exam` added on `biz_001.marks` (5-column: `business_id, student_id, subject_id, exam_type, exam_date`)
-
-### 2026-05-06 — Class normalisation extended + teacher_subjects FK repoint
-**Changes:**
-- Class normalisation extended to `teacher_subjects` (4th table)
-- `teacher_subjects.subject_id` repointed for Ramesh (`b1000001-…`) from orphaned `a1b2c301-0002-…` to current Mathematics UUID `bdde6895-c643-47a0-a513-4552aa6e42b7`
-- Backup table `biz_001.teacher_subjects_backup_20260506` created (RLS-enabled, postgres-only)
-
-### 2026-05-06 — Stage 5 build merged
-**Changes:**
-- PR #2 squash-merged to main (commit `b883c74`)
-- MarksTab ~860 lines added; 5 diagnostic console.log lines removed for shipping
-- T1–T6 all PASSED
-
-### 2026-05-07 — Migration 007 (Pre-Wave-1 cleanup part 1)
-**Reason:** Capture three Pre-Wave-1 fixes in a committed migration script for audit trail and idempotency. First migration committed to repo; previous migrations 000-006 referenced in this log but exist only in live Supabase (Pre-Wave-1 #19 to backfill).
-
-**Changes captured:**
-- Class normalisation across 3 tables (39 rows updated): `biz_001.attendance` (29), `biz_001.fee_structure` (4), `biz_001.teacher_subjects` (6) — all `'Class 9'` → `'9'`
-- `DROP TABLE biz_002.user_roles` — architectural drift cleanup; was empty scaffolding
-- `biz_001.log_audit()` function fix: UPDATE branch was losing OLD data because `TG_OP IN ('DELETE')` only included DELETE; expanded to `TG_OP IN ('UPDATE', 'DELETE')`. Verified via no-op UPDATE on `biz_001.attendance` producing `has_old_data=true`.
-
-**Closes:** Pre-Wave-1 #1, #9, #13. Commit `a5fb49c`.
-
-### 2026-05-08 — Migration 008 (Pre-Wave-1 cleanup part 2)
-**Reason:** Add 10 missing columns to `biz_001.student_profiles` per Pre-Wave-1 #10 design.
-
-**Changes:**
-- `ALTER TABLE biz_001.student_profiles ADD COLUMN IF NOT EXISTS` for 10 columns (idempotent): `roll_number text`, `gender text [DPDP]`, `photo_url text`, `admission_date date`, `fee_category text`, `transport_mode text`, `previous_school text`, `disability_status text [DPDP]`, `academic_year text`, `enrollment_status text NOT NULL DEFAULT 'enrolled'`
-- `COMMENT ON COLUMN` for each new column
-
-**Drift correction:** Original build log listed "status" — but `entities.status` already exists. Renamed to `enrollment_status` to disambiguate entity-level vs student-level state.
-
-**Verified post-migration:** `student_profiles` now has 23 columns (was 13). All 10 new columns present with correct types, defaults, and nullability.
-
-**DPDP gate:** `gender` and `disability_status` columns added; real values must NOT be migrated until DPA is signed and parental consent is captured.
-
-**Closes:** Pre-Wave-1 #10. Commit `11b3426`.
-
-### 2026-05-08 — Migration 009 (Pre-Wave-1 cleanup part 3)
-**Reason:** Create `biz_001.teacher_profiles` table per Pre-Wave-1 #16 design (Path A: mirror `student_profiles` shape with teacher-specific columns).
-
-**Drift correction:** Original build log called this "asymmetry vs student_profiles." On verification, no `teacher_profiles` table existed at all. Reframed and resolved.
-
-**Changes:**
-- `CREATE TABLE IF NOT EXISTS biz_001.teacher_profiles` with 15 columns: id (uuid PK), business_id, entity_id (NOT NULL), employee_code, joining_date, qualifications, employment_type, photo_url, gender [DPDP], date_of_birth [DPDP], blood_group, employment_status (NOT NULL DEFAULT 'active'), metadata (jsonb), created_at, updated_at
-- `CREATE INDEX IF NOT EXISTS idx_teacher_profiles_entity_id` on `entity_id`
-- `COMMENT ON TABLE` + 9 column comments
-
-**Future work (NOT in scope of 009):** FK constraint `entity_id → entities(id)`, audit_log trigger, RLS policies. To be done in dedicated migrations.
-
-**Verified post-migration:** Table exists with 15 columns; defaults and NOT NULL constraints correct.
-
-**DPDP gate:** `gender` and `date_of_birth` columns added; real values must NOT be migrated until DPA is signed.
-
-**Closes:** Pre-Wave-1 #16. Commit `b10dbb8`.
-
-## Next task
-
-- **Immediate next move:** lawyer email (DPA + Privacy Notice; DPDP Act 2023 + children's data) — gates Wave 1 migration.
-- **Next stage of build:** Pre-Wave-1 hardening sub-stage (this week), then Stage 6 HomeworkTab (Week 2).
+**Next build move (after non-technical unblockers):** TBD between Wave A agent wiring (4 of 8 remaining in AgentEdge Unified), Parent/Student homework views (B-43), or other Pre-Wave-1 cleanup. Pick after lawyer email is sent and Stephen has committed a data date.
