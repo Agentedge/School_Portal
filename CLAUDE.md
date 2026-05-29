@@ -47,7 +47,7 @@ GTM constraint: Telugu AI tutor content tied to SCERT syllabus. School product i
 ### Next decision — three candidate paths (no commitment yet)
 Ordered by go-live impact:
 1. **Non-technical blockers** (lawyer email → Stephen data call → domain). Single highest-leverage move.
-2. **Wave A agent wiring** (in AgentEdge Unified repo) — RouteWatch, AdmissionRadar, HomeView, StaffPulse already on live data; 4 of 8 agents remain on mock.
+2. **AgentEdge Unified polish** (in AgentEdge Unified repo) — Wave A is COMPLETE (all 8 agents wired to live Supabase as of 2026-05-13: RouteWatch, AdmissionRadar, StaffPulse, FeeAlert, AttritionGuard, AttendanceFlag, ResultPredictor, ParentBridge). Remaining polish: real login form (Stage 2 form vs current auto-signin), credentials out of source into Vercel env vars (B-24, B-37), Vercel deployment protection off (B-27) before any external demo.
 3. **Parent + Student views (B-43)** — required for full Phase 1, but not strictly gating June 8 teacher-facing functionality.
 
 ## Database — Supabase (Mumbai, ap-south-1)
@@ -221,6 +221,8 @@ All migrations live in `sql/` in this repo. **Several migrations (M016, M017, M0
 
 ### Recent items (B-XX series)
 - **B-10** Legacy `admin` role in user_roles CHECK preserved alongside `admin_team`. ✅ Captured in M016.
+- **B-24** Hardcoded Supabase credentials in `AgentEdge_Unified/index.html` source. Move to Vercel env vars before any external demo. **OPEN.** *AgentEdge_Unified repo.*
+- **B-27** Vercel deployment protection enabled on `AgentEdge_Unified` project (Hobby plan default for private repos — blocks external viewing). Disable before external demo. **OPEN.** *AgentEdge_Unified repo.*
 - **B-30** M017 INITCAP `'Admin_Team'` (wrong case). ✅ Closed by M019.
 - **B-33** `entities` table missing admin_team policy → silent 0-row return for StaffPulse. ✅ Closed by M020.
 - **B-37** admin password committed in `AgentEdge_Unified` repo (separate private repo). Not active exposure but bad hygiene. **OPEN.**
@@ -365,4 +367,4 @@ Never echo real credential values in diffs. Store in named config objects (`AGEN
 
 **Highest-leverage single move (this week):** Lawyer email — DPA + Privacy Notice drafting. Gates Wave 1 migration. Has been parked >16 days; cost of further delay is direct cost on the June 8 timeline.
 
-**Next build move (after non-technical unblockers):** TBD between Wave A agent wiring (4 of 8 remaining in AgentEdge Unified), Parent/Student homework views (B-43), or other Pre-Wave-1 cleanup. Pick after lawyer email is sent and Stephen has committed a data date.
+**Next build move (after non-technical unblockers):** TBD between Parent/Student homework views (B-43) for Pathshala, AgentEdge Unified polish (login form, credentials hygiene, deployment protection — see backlog B-24, B-27, B-37), or other Pre-Wave-1 cleanup. Pick after lawyer email is sent and Stephen has committed a data date.
