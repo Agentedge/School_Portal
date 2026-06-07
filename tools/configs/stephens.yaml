@@ -6,7 +6,7 @@
 client:
   business_id: biz_001
   name: "St. Stephen's School"
-  source_file: tools/sources/sample_data/onboarding_sample.xlsx
+  source_file: tools/sources/sample_data/Stephens_Class9_MIGRATION_SOURCE.xlsx
 
 # Columns that hold sensitive data and must stay NULL until consent is recorded.
 # None for this load — placeholder for when such fields are added.
@@ -23,7 +23,7 @@ mappings:
     entity_type: parent
     join_key: phone            # students will find their parent by this value
     fields:
-      first_name: { from: "Primary Contact Name" }
+      first_name: { from: "Father Name" }
       phone:      { from: "Primary Phone" }
       whatsapp:   { from: "WhatsApp Number" }
       email:      { from: "Email" }
@@ -40,7 +40,7 @@ mappings:
     target_table: communication_preferences
     link: { parent_entity_id: phone }     # link by the parent's phone
     fields:
-      preferred_channel:  { from: "Preferred Channel", transform: lower }
+      preferred_channel:  { from: "SMS", transform: lower }
       preferred_language: { from: "Preferred Language", transform: lower }
 
   # 3. Students become rows in `entities` (entity_type = student).
