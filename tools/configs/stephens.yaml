@@ -1,76 +1,24 @@
-# stephens.yaml — data-migration config for St. Stephen's School (biz_001)
-# A "recipe card": the top says WHO this client is; the `mappings` section says
-# which spreadsheet column fills which database column. The Python engine reads
-# this file and does the work — no logic lives here, only facts.
+# stephens.yaml — Pass A (people-only) data-migration config for
+# St. Stephen's School (biz_001), v3 people-first collection sheet.
+#
+# The column mappings now live in the Python engine (the v3 sheet shape needs
+# cross-sheet logic the old declarative form couldn't express). This file holds
+# only the client facts plus the two switches the engine reads: the academic-year
+# constant and the DPA gate. Pointing at Stephen's REAL file later is the
+# one-line source_file swap below.
 
 client:
   business_id: biz_001
   name: "St. Stephen's School"
-  source_file: tools/sources/sample_data/Stephens_Class9_MIGRATION_SOURCE.xlsx
+  source_file: tools/sources/sample_data/MOCK_v3_filled.xlsx
 
-# Columns that hold sensitive data and must stay NULL until consent is recorded.
-# None for this load — placeholder for when such fields are added.
-dpdp_gated_columns: []
+# Constant stamped onto every student_profiles / teacher_assignments row.
+academic_year: "2026-27"
 
-# Each block = one insert step. They run top-to-bottom; later steps can reuse
-# the IDs created by earlier ones.
-mappings:
-
-  # 1. Parents become rows in `entities` (entity_type = parent).
-  parents:
-    source_sheet: parents
-    target_table: entities
-    entity_type: parent
-    join_key: phone            # students will find their parent by this value
-    fields:
-      first_name: { from: "Father Name" }
-      phone:      { from: "Primary Phone" }
-      whatsapp:   { from: "WhatsApp Number" }
-      email:      { from: "Email" }
-      address:    { combine: ["Address", "City", "Pincode"], sep: ", " }
-    metadata:                  # extra columns tucked into entities.metadata (jsonb)
-      father_name: "Father Name"
-      mother_name: "Mother Name"
-      city: "City"
-      pincode: "Pincode"
-
-  # 2. One communication-preferences row per parent.
-  parent_comms:
-    source_sheet: parents
-    target_table: communication_preferences
-    link: { parent_entity_id: phone }     # link by the parent's phone
-    fields:
-      preferred_channel:  { from: "SMS", transform: lower }
-      preferred_language: { from: "Preferred Language", transform: lower }
-
-  # 3. Students become rows in `entities` (entity_type = student).
-  students:
-    source_sheet: students
-    target_table: entities
-    entity_type: student
-    fields:
-      first_name: { from: "First Name" }
-      last_name:  { from: "Last Name" }
-
-  # 4. The academic record, tying student-card to parent-card.
-  student_profiles:
-    source_sheet: students
-    target_table: student_profiles
-    link:
-      entity_id: self                              # the student's own entity row
-      parent_id: { lookup_parent_by: "Parent Phone (lookup)" }
-    fields:
-      roll_number:       { from: "Roll No" }
-      admission_number:  { from: "Admission Number" }
-      class:             { from: "Class", transform: normalize_class }
-      section:           { from: "Section" }
-      house:             { from: "House" }
-      date_of_birth:     { from: "Date of Birth", transform: to_date }
-      admission_date:    { from: "Admission Date", transform: to_date }
-      gender:            { from: "Gender" }
-      blood_group:       { from: "Blood Group" }
-      disability_status: { from: "Disability Status" }
-      academic_year:     { const: "2026-27" }
-    metadata:
-      mother_tongue: "Mother Tongue"
-      religion: "Religion"
+# DPA GATE (DPDP Act 2023 — children's data).
+# While dpa_signed is false, the gated student fields below are written as NULL
+# (and omitted from jsonb metadata) so the roster still loads — attendance needs
+# none of them. Flip to true only AFTER the signed DPA, then backfill the gated
+# values. (Scope: student data. Teacher dob/gender are staff data, not gated.)
+dpa_signed: false
+dpa_gated_columns: [date_of_birth, gender, blood_group, disability_status, religion]
