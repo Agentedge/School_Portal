@@ -56,7 +56,7 @@ def main(config_path: str) -> int:
     print(f"  teacher entities         : {len(data['teachers'])}")
     print(f"  parent entities (deduped): {len(data['parents'])}")
     print(f"  student entities         : {len(data['students'])}")
-    print(f"  teacher_assignments rows : {len(data['teacher_assignments'])}")
+    print(f"  teacher_assignments rows : {data.get('_assignment_rows', len(data['teacher_assignments']))} (deduped)")
 
     print("\n---- login_id handles (assign order: teachers -> parents -> students) ----")
     for block in ("teachers", "parents", "students"):

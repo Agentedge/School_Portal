@@ -96,10 +96,36 @@ def build_insert_sql(transformed: dict, config: dict) -> str:
     phone_to_parent = {p["_phone"]: pid for p, pid in zip(parents, parent_ids) if p.get("_phone")}
     phone_to_teacher = {t["_phone"]: tid for t, tid in zip(teachers, teacher_ids) if t.get("_phone")}
 
+    # De-duplicate teacher_assignments: collapse to ONE row per
+    # (teacher_id, class, section, role, academic_year, is_active). Subject is not a
+    # column on this table — every subject code is already preserved on the teacher
+    # entity's metadata.subject_codes by the transformer, so collapsing loses nothing
+    # (e.g. Sita Rao's ENG + SCI rows become one assignment; both codes stay in metadata).
+    assignment_rows = []
+    seen_assign = set()
+    for a in assignments:
+        tid = phone_to_teacher.get(a.get("_teacher_phone"))
+        if tid is None:
+            continue   # unknown teacher phone — validator already warned
+        key = (tid, a["class"], a["section"], a["role"], a["academic_year"], a["is_active"])
+        if key in seen_assign:
+            continue
+        seen_assign.add(key)
+        assignment_rows.append({
+            "teacher_id": tid,
+            "auth_user_id": None,
+            "class": a["class"],
+            "section": a["section"],
+            "role": a["role"],
+            "academic_year": a["academic_year"],
+            "is_active": a["is_active"],
+        })
+    transformed["_assignment_rows"] = len(assignment_rows)
+
     lines = [
         f"-- Pass A people migration: {config['client']['name']} ({schema})",
         f"-- {len(teachers)} teachers, {len(parents)} parents, {len(students)} students, "
-        f"{len(assignments)} teacher_assignments",
+        f"{len(assignment_rows)} teacher_assignments (deduped)",
         f"-- dpa_signed={config.get('dpa_signed', False)} "
         f"(gated columns written NULL while false)",
         "BEGIN;",
@@ -123,20 +149,8 @@ def build_insert_sql(transformed: dict, config: dict) -> str:
         row = {"entity_id": sid, "parent_id": parent_id, **s["_profile"]}
         lines.append(_insert(schema, "student_profiles", row))
 
-    lines += ["", "-- 5. Teacher assignments (class/section/role; auth_user_id set later)"]
-    for a in assignments:
-        tid = phone_to_teacher.get(a.get("_teacher_phone"))
-        if tid is None:
-            continue   # unknown teacher phone — validator already warned
-        row = {
-            "teacher_id": tid,
-            "auth_user_id": None,
-            "class": a["class"],
-            "section": a["section"],
-            "role": a["role"],
-            "academic_year": a["academic_year"],
-            "is_active": a["is_active"],
-        }
+    lines += ["", "-- 5. Teacher assignments (deduped: one row per teacher/class/section/role)"]
+    for row in assignment_rows:
         lines.append(_insert(schema, "teacher_assignments", row))
 
     lines += ["", "COMMIT;"]
