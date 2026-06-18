@@ -175,18 +175,25 @@ function Toast({ msg }) {
 // ─── Login ──────────────────────────────────────────────────────────────────
 
 function LoginScreen({ onLogin }) {
-  const [email,   setEmail]  = useState("");
+  const [loginId, setLoginId]= useState("");
   const [pwd,     setPwd]    = useState("");
   const [error,   setError]  = useState("");
   const [showPwd, setShowPwd]= useState(false);
   const [loading, setLoading]= useState(false);
 
   const handleSignIn = async () => {
-    if (!email.trim() || !pwd) return;
+    if (!loginId.trim() || !pwd) return;
     setLoading(true); setError("");
 
+    // Teachers/parents type a short handle (e.g. "avbhargav"). Auth keys on
+    // email, so we build one from the handle. If someone types a full email
+    // (test/admin accounts), use it as-is so existing logins keep working.
+    const LOGIN_DOMAIN = "stephens.agentedge.in";
+    const id = loginId.trim().toLowerCase();
+    const emailToUse = id.includes("@") ? id : (id + "@" + LOGIN_DOMAIN);
+
     const { data: authData, error: authErr } =
-      await db.auth.signInWithPassword({ email: email.trim(), password: pwd });
+      await db.auth.signInWithPassword({ email: emailToUse, password: pwd });
     if (authErr) {
       setError(authErr.message);
       setLoading(false); return;
@@ -242,8 +249,8 @@ function LoginScreen({ onLogin }) {
         </div>
 
         <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
-          <input type="email" value={email} onChange={e=>{ setEmail(e.target.value); setError(""); }}
-            placeholder="Email address"
+          <input type="text" value={loginId} onChange={e=>{ setLoginId(e.target.value); setError(""); }}
+            placeholder="Login ID" autoCapitalize="none" autoCorrect="off" spellCheck={false}
             style={{ padding:"14px 16px", borderRadius:12, boxSizing:"border-box", width:"100%",
               border:`1.5px solid ${error?"#E53E3E":"rgba(255,255,255,0.1)"}`,
               background:"rgba(255,255,255,0.07)", color:"white", fontSize:14, fontFamily:font, outline:"none" }} />
@@ -886,13 +893,6 @@ function AttendanceTab({ assignment, role, showToast, leaveGuardRef }) {
               borderRadius:10, border:"1.5px solid #e2e8f0", fontSize:13, fontFamily:font,
               outline:"none", color:"#1e293b", background:"#f8fafc" }} />
         </div>
-        {!sunday && (
-          <div style={{ flex:1 }}>
-            <Sel label="Period" value={selectedPeriod}
-              onChange={e => requestPeriodChange(Number(e.target.value))}
-              options={periodOpts} />
-          </div>
-        )}
       </div>
 
       {sunday && (
