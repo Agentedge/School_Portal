@@ -1,0 +1,24 @@
+# stephens.yaml — Pass A (people-only) data-migration config for
+# St. Stephen's School (biz_001), v3 people-first collection sheet.
+#
+# The column mappings now live in the Python engine (the v3 sheet shape needs
+# cross-sheet logic the old declarative form couldn't express). This file holds
+# only the client facts plus the two switches the engine reads: the academic-year
+# constant and the DPA gate. Pointing at Stephen's REAL file later is the
+# one-line source_file swap below.
+
+client:
+  business_id: biz_001
+  name: "St. Stephen's School"
+  source_file: tools/sources/sample_data/MOCK_v3_filled.xlsx
+
+# Constant stamped onto every student_profiles / teacher_assignments row.
+academic_year: "2026-27"
+
+# DPA GATE (DPDP Act 2023 — children's data).
+# While dpa_signed is false, the gated student fields below are written as NULL
+# (and omitted from jsonb metadata) so the roster still loads — attendance needs
+# none of them. Flip to true only AFTER the signed DPA, then backfill the gated
+# values. (Scope: student data. Teacher dob/gender are staff data, not gated.)
+dpa_signed: false
+dpa_gated_columns: [date_of_birth, gender, blood_group, disability_status, religion]

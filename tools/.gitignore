@@ -1,0 +1,12 @@
+# Python virtual environment
+.venv/
+
+# Generated migration SQL (regenerate from the toolbox; never commit)
+output/
+
+# Raw client / sample data — never commit
+sources/sample_data/
+
+# Python bytecode
+__pycache__/
+*.pyc
